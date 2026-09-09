@@ -20,7 +20,7 @@ def generate_answer(graph_state: state) -> str:
         'user_clarification': user_clarification
     })
     
-    return {'answer' : answer}
+    return {'answer' : answer.content}
     
     
 

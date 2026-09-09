@@ -19,6 +19,7 @@ class QueryRequest(BaseModel):
     question: str
 
 
+
 @app.get("/")
 def root():
     return {
@@ -35,5 +36,8 @@ def query_database(request: QueryRequest):
         "question": question
     })
 
-    return result
+    print("RESULT TYPE:", type(result))
+    print("RESULT:", result)
+    
+    return result['answer']
 
