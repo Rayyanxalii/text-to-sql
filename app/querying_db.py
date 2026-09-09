@@ -13,7 +13,7 @@ def validate_sql_syntax(graph_state : state):
         
         return {
             "sql_valid": True,
-            "error": ""
+            "sql_valid_error": ""
         }
         
     except Exception as e:
@@ -22,7 +22,7 @@ def validate_sql_syntax(graph_state : state):
         
         return{
             'sql_valid': False,
-            'error': str(e)
+            'sql_valid_error': str(e)
         }
         
         
@@ -38,12 +38,12 @@ def execute_sql(graph_state : state):
             rows = result.fetchall()
         
         return {
-            'db_result' : rows,
+            'db_result' : [tuple(row) for row in rows],
             'sql_execution_error': None
         }
     
     except Exception as e:
-        print('Error occured during sql execution. Error: {e}')
+        print(f'Error occured during sql execution. Error: {e}')
         return {
                     'db_result' : None,
                     'sql_execution_error' : str(e)

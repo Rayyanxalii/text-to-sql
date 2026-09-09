@@ -35,9 +35,11 @@ def query_database(request: QueryRequest):
     result = graph.invoke({
         "question": question
     })
-
-    print("RESULT TYPE:", type(result))
-    print("RESULT:", result)
     
-    return result['answer']
+    print(f'Result: {result}')
+    
+    for key, value in result.items():
+        print(key, "->", type(value), repr(value))
+
+    return result
 
