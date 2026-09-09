@@ -9,6 +9,7 @@ def generate_sql(graph_state: state) -> str:
     question = graph_state.question
     schema = graph_state.db_schema
     user_clarification = graph_state.user_clarification or ""
+    messages = graph_state.messages
     
     
     structured_llm = llm.with_structured_output(sql)
@@ -18,7 +19,8 @@ def generate_sql(graph_state: state) -> str:
     result = sql_chain.invoke({
     "schema": schema,
     "question": question,
-    "clarification_answer": user_clarification
+    "clarification_answer": user_clarification,
+    'messages' : messages
     })
     
     return {'sql': result.sql}

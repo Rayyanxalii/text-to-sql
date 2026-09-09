@@ -8,6 +8,7 @@ def clarification_node(graph_state: state) -> str:
     question = graph_state.question
     schema = graph_state.db_schema
     user_clarification = graph_state.user_clarification or ""
+    messages = graph_state.messages
     
         
     structured_llm =  llm.with_structured_output(ClarificationResult)
@@ -17,7 +18,8 @@ def clarification_node(graph_state: state) -> str:
     result = clarification_chain.invoke({
     "schema": schema,
     "question": question,
-    "user_clarification": user_clarification
+    "user_clarification": user_clarification,
+    'messages' : messages
 })
     
     print(result)

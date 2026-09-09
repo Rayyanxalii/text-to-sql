@@ -32,5 +32,5 @@ def correct_sql_syntax(graph_state: state) -> str:
     
     return {
         'sql': corrected_sql_result.sql,
-        'correct_sql_count': graph_state['correct_sql_count'] + 1
+        'correct_sql_count': graph_state.correct_sql_count + 1
     }

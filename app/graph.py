@@ -9,10 +9,12 @@ from app.nodes.generate_sql_node import generate_sql
 from app.nodes.ask_user_node import ask_user
 from app.nodes.correct_sql_syntax_node import correct_sql_syntax
 from app.nodes.validate_sql_semantic_node import validate_sql_semantic
-from app.services.schema_service import get_metadata
 
 
-db_schema = get_metadata()
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+checkpointer = InMemorySaver()
     
 
 graph = StateGraph(state)
@@ -67,7 +69,7 @@ graph.add_edge('execute_sql', 'generate_answer')
 graph.add_edge('generate_answer', END)
 
 
-graph_view = graph.compile()
+graph_view = graph.compile(checkpointer = checkpointer)
 
 
 # png_data = graph_view.get_graph().draw_mermaid_png()
@@ -76,13 +78,3 @@ graph_view = graph.compile()
 # with open("graph.png", "wb") as f:
 #     f.write(png_data)
     
-    
-# result = graph_view.invoke({
-#     "question": "Give record of all doctors",
-#     'is_clear': False,
-#     'schema': db_schema,
-#     'ask_user_count': 0,
-#     'correct_sql_count': 0
-# })
-
-# print(result['answer'].content)

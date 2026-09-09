@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from app.graph import graph_view as graph
 from app.services.schema_service import get_metadata
+from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.types import Command
+
+
 
 
 
@@ -17,6 +21,8 @@ app = FastAPI(
 
 class QueryRequest(BaseModel):
     question: str
+    conversation_id: str
+    resume: bool = False
 
 
 
@@ -30,16 +36,33 @@ def root():
 @app.post("/query")
 def query_database(request: QueryRequest):
     
-    question = request.question
-
-    result = graph.invoke({
-        "question": question
-    })
+       config = {
+           'configurable':{
+               'thread_id': request.conversation_id
+           }
+       }       
+       
+       if request.resume:
+           
+           result = graph.invoke(
+               Command(resume = request.question),
+               config = config
+           )
+        
+       else:
+           
+            result = graph.invoke({
+               "question": request.question,
+               'messages': [HumanMessage(content = request.question)]   
+               },
+                config = config            
+                           )
     
-    print(f'Result: {result}')
+       print(f'Result: {result}')
     
-    for key, value in result.items():
-        print(key, "->", type(value), repr(value))
-
-    return result
+    
+       return {
+        'messages': [AIMessage(content = result['answer'])],
+        'answer' : result['answer']
+    }
 
