@@ -32,22 +32,27 @@ def execute_sql(graph_state : state):
     sql = graph_state.sql
     
     try: 
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             result = conn.execute(text(sql))
             
-            rows = result.fetchall()
+            if result.returns_rows:
+                rows = result.fetchall()
+                db_result = [tuple(row) for row in rows]
+            else:
+                db_result = [("status", "success", "rows_affected", result.rowcount)]
         
         return {
-            'db_result' : [tuple(row) for row in rows],
+            'db_result': db_result,
             'sql_execution_error': None
         }
     
     except Exception as e:
-        print(f'Error occured during sql execution. Error: {e}')
+        print(f'Error occurred during sql execution. Error: {e}')
         return {
-                    'db_result' : None,
-                    'sql_execution_error' : str(e)
-                }
+            'db_result': None,
+            'sql_execution_error': str(e)
+        }
+
         
         
 

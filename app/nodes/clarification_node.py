@@ -19,8 +19,8 @@ def clarification_node(graph_state: state) -> str:
     result = clarification_chain.invoke({
     "schema": schema,
     'question':question,
-    "clarification_question": clarification_question,
-    "user_clarification": user_clarification,
+    "clarification_question": clarification_question if clarification_question else "",
+    "user_clarification": user_clarification if user_clarification else "",
     'messages' : messages
 })
     

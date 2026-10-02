@@ -12,28 +12,27 @@ a correct PostgreSQL SQL query using ONLY the provided database schema.
 
 Rules:
 
-1. Return ONLY the SQL query.
-2. Do NOT include explanations, comments, Markdown, or code fences.
-3. Do NOT return ```sql or ``` around the query.
-4. Use ONLY tables and columns that exist in the provided schema.
-5. Do NOT invent tables, columns, relationships, values, or assumptions.
-6. Use appropriate JOINs when information from multiple tables is required.
-7. Use explicit JOIN conditions based on the relationships defined in the schema.
-8. Use valid PostgreSQL syntax.
-9. Respect the user's original question exactly.
-10. Treat the user's clarification as additional information about their intent.
-11. If the clarification changes or narrows the meaning of the original question,
+1. Return a JSON object containing the generated SQL query according to the format instructions.
+2. Do NOT include explanations, commentary, or text outside the JSON object.
+3. Use ONLY tables and columns that exist in the provided schema.
+4. Do NOT invent tables, columns, relationships, values, or assumptions.
+5. Use appropriate JOINs when information from multiple tables is required.
+6. Use explicit JOIN conditions based on the relationships defined in the schema.
+7. Use valid PostgreSQL syntax.
+8. Respect the user's original question exactly.
+9. Treat the user's clarification as additional information about their intent.
+10. If the clarification changes or narrows the meaning of the original question,
     incorporate it into the SQL.
-12. Do not add unnecessary filters, conditions, sorting, grouping, or limits
+11. Do not add unnecessary filters, conditions, sorting, grouping, or limits
     that were not requested.
-13. If a date or date range is specified, translate it correctly into
+12. If a date or date range is specified, translate it correctly into
     PostgreSQL date/time conditions.
-14. For name-based filtering, use the correct table and column from the schema.
-15. Use SELECT * when the user explicitly asks for all details or when it is
+13. For name-based filtering, use the correct table and column from the schema.
+14. Use SELECT * when the user explicitly asks for all details or when it is
     clearly appropriate.
-16. Make sure JOINs do not unintentionally duplicate or exclude results.
-17. Generate one SQL query that directly answers the user's question.
-18. Use attributes name similar to what is been given by database schema because user can give attribute name with some small uncorrectness, such as user gives 'Cardiologist' as 'cardiologist' (which have small characters and their may be spelling errors too), so always generate query according to database schema.
+15. Make sure JOINs do not unintentionally duplicate or exclude results.
+16. Generate one SQL query that directly answers the user's question.
+17. Use attributes name similar to what is been given by database schema because user can give attribute name with some small uncorrectness, such as user gives 'Cardiologist' as 'cardiologist' (which have small characters and their may be spelling errors too), so always generate query according to database schema.
 
 Database Schema:
 {schema}
@@ -43,6 +42,9 @@ Original User Question:
 
 User's Clarification:
 {clarification_answer}
+
+Format Instructions:
+{format_instructions}
 """
     ),
 
@@ -51,6 +53,6 @@ User's Clarification:
 
     (
         "human",
-        "Generate the PostgreSQL SQL query."
+        "Generate the PostgreSQL SQL query in JSON format."
     )
 ])

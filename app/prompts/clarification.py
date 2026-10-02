@@ -149,12 +149,16 @@ user question:
 {question}
 
 clarification question for the user:
-{user_clarification}
+{clarification_question}
 
 User's previous clarification:
 {user_clarification}
 """
     ),
 
-    MessagesPlaceholder(variable_name="messages")
+    MessagesPlaceholder(variable_name="messages"),
+    (
+        "human",
+        "Based on the conversation and any clarifications provided, evaluate whether the user's intent is clear enough to construct SQL. Return your assessment."
+    )
 ])

@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from app.graph import graph_view as graph
 from langchain_core.messages import HumanMessage, AIMessage
@@ -6,7 +6,6 @@ from langgraph.types import Command
 
 
 # schema = get_metadata()
-
 
 app = FastAPI(
     title="Text-to-SQL API",
@@ -16,11 +15,9 @@ app = FastAPI(
 
 
 class QueryRequest(BaseModel):
-    question: str
+    question: str | None = None
     clarification_answer: str | None = None
     conversation_id: str
-    resume: bool = False
-
 
 
 @app.get("/")
@@ -30,6 +27,38 @@ def root():
     }
     
 
+def format_graph_output(result, conversation_id: str):
+    if not isinstance(result, dict):
+        if hasattr(result, "model_dump"):
+            result_dict = result.model_dump()
+        elif hasattr(result, "__dict__"):
+            result_dict = result.__dict__
+        else:
+            result_dict = {"output": result}
+    else:
+        result_dict = result
+
+    interrupts = result_dict.get("__interrupt__")
+    if interrupts:
+        interrupt_item = interrupts[0]
+        clarification_q = (
+            interrupt_item.value
+            if hasattr(interrupt_item, "value")
+            else str(interrupt_item)
+        )
+        return {
+            "conversation_id": conversation_id,
+            "requires_clarification": True,
+            "clarification_question": clarification_q,
+        }
+
+    output = dict(result_dict)
+    output["conversation_id"] = conversation_id
+    output["requires_clarification"] = False
+    return output['answer'] if 'answer' in output else 'No answer generated'
+
+
+
 @app.post("/query")
 def query_database(request: QueryRequest):
     config = {
@@ -37,41 +66,51 @@ def query_database(request: QueryRequest):
             'thread_id': request.conversation_id
         }
     }
-
-    if request.resume:
-        resumed_value = request.clarification_answer or request.question
-        result = graph.invoke(
-            Command(resume=resumed_value),
-            config=config,
-        )
+    
+    snapshot = graph.get_state(config)
+    tasks = getattr(snapshot, 'tasks', [])
+    has_interrupt = any(bool(task.interrupts) for task in tasks) or bool(getattr(snapshot, 'interrupts', False))
+    
+    if has_interrupt:
+        if request.clarification_answer:
+            command = Command(resume=request.clarification_answer)
+            result = graph.invoke(command, config=config)
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail="Clarification answer required to resume the query."
+            )
     else:
-        result = graph.invoke(
-            {
+        if request.clarification_answer:
+            raise HTTPException(
+                status_code=409,
+                detail="No pending clarification to resume."
+            )
+        if request.question:
+            initial_state = {
                 "question": request.question,
-                'messages': [HumanMessage(content=request.question)],
-            },
-            config=config,
-        )
-
-    print(f'Result: {result}')
-
-    if 'answer' in result and result.get('answer'):
-        return {
-            'messages': [AIMessage(content=result['answer'])],
-            'answer': result['answer'],
-        }
-
-    if result.get('clarification_question'):
-        return {
-            'messages': result.get('messages', []),
-            'clarification_question': result['clarification_question'],
-            'answer': '',
-            'requires_clarification': True,
-        }
-
-    return {
-        'messages': result.get('messages', []),
-        'answer': '',
-        'requires_clarification': False,
-    }
+                "messages": [HumanMessage(content=request.question)],
+                "user_clarification": None,
+                "clarification_question": None,
+                "clarification_reason": None,
+                "is_clear": False,
+                "sql": "",
+                "sql_valid": False,
+                "sql_valid_error": None,
+                "ask_user_count": 0,
+                "correct_sql_count": 0,
+                "semantic_error": None,
+                "semantic_error_reason": None,
+                "db_result": None,
+                "sql_execution_error": None,
+                "answer": "",
+            }
+            result = graph.invoke(initial_state, config=config)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Question is required for a new query."
+            )
+        
+    return format_graph_output(result, request.conversation_id)
 
