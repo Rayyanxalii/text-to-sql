@@ -106,11 +106,50 @@ Human: "Which ones treated Ahmed?"
 → CLEAR if the schema contains enough information to determine
 which doctors treated Ahmed.
 
+
+
+There are two possible situations:
+
+1. This is a new user question.
+   Determine whether the question is clear.
+
+2. The system previously asked a clarification question and
+   the user has now provided user_clarification.
+   In this case, use the user's clarification to resolve the
+   original question.
+
+If the user's clarification sufficiently resolves the ambiguity,
+set is_clear=True.
+
+Do NOT ask the same clarification question again if the user
+has already provided the requested information.
+
+Example:
+
+Original question:
+"How many of them are physician?"
+
+Clarification question:
+"What specific type of physician are you referring to?"
+
+User clarification:
+"I mean General Physician."
+
+This is CLEAR.
+
+Interpret the final intent as:
+"How many of them are General Physicians?"
+
+For your info I have given you both the user's initial question as well as the 'clarification question' & 'iser_clarification' for that specific clarification question, so you have to check wether user_clarification clears the ambiguity asked in clarification_question
+
 Database schema:
 {schema}
 
-Current user question:
+user question:
 {question}
+
+clarification question for the user:
+{user_clarification}
 
 User's previous clarification:
 {user_clarification}

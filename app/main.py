@@ -1,15 +1,11 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from app.graph import graph_view as graph
-from app.services.schema_service import get_metadata
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
 
 
-
-
-
-schema = get_metadata()
+# schema = get_metadata()
 
 
 app = FastAPI(
@@ -21,6 +17,7 @@ app = FastAPI(
 
 class QueryRequest(BaseModel):
     question: str
+    clarification_answer: str | None = None
     conversation_id: str
     resume: bool = False
 
@@ -35,34 +32,46 @@ def root():
 
 @app.post("/query")
 def query_database(request: QueryRequest):
-    
-       config = {
-           'configurable':{
-               'thread_id': request.conversation_id
-           }
-       }       
-       
-       if request.resume:
-           
-           result = graph.invoke(
-               Command(resume = request.question),
-               config = config
-           )
-        
-       else:
-           
-            result = graph.invoke({
-               "question": request.question,
-               'messages': [HumanMessage(content = request.question)]   
-               },
-                config = config            
-                           )
-    
-       print(f'Result: {result}')
-    
-    
-       return {
-        'messages': [AIMessage(content = result['answer'])],
-        'answer' : result['answer']
+    config = {
+        'configurable': {
+            'thread_id': request.conversation_id
+        }
+    }
+
+    if request.resume:
+        resumed_value = request.clarification_answer or request.question
+        result = graph.invoke(
+            Command(resume=resumed_value),
+            config=config,
+        )
+    else:
+        result = graph.invoke(
+            {
+                "question": request.question,
+                'messages': [HumanMessage(content=request.question)],
+            },
+            config=config,
+        )
+
+    print(f'Result: {result}')
+
+    if 'answer' in result and result.get('answer'):
+        return {
+            'messages': [AIMessage(content=result['answer'])],
+            'answer': result['answer'],
+        }
+
+    if result.get('clarification_question'):
+        return {
+            'messages': result.get('messages', []),
+            'clarification_question': result['clarification_question'],
+            'answer': '',
+            'requires_clarification': True,
+        }
+
+    return {
+        'messages': result.get('messages', []),
+        'answer': '',
+        'requires_clarification': False,
     }
 

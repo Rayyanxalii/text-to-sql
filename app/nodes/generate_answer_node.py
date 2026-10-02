@@ -24,7 +24,7 @@ def generate_answer(graph_state: state) -> str:
     })
     
     return {'answer' : answer.content,
-            'message' : [AIMessage(content = answer.content)]
+            'messages' : [AIMessage(content = answer.content)]
             }
     
     

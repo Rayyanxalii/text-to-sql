@@ -33,6 +33,7 @@ Rules:
     clearly appropriate.
 16. Make sure JOINs do not unintentionally duplicate or exclude results.
 17. Generate one SQL query that directly answers the user's question.
+18. Use attributes name similar to what is been given by database schema because user can give attribute name with some small uncorrectness, such as user gives 'Cardiologist' as 'cardiologist' (which have small characters and their may be spelling errors too), so always generate query according to database schema.
 
 Database Schema:
 {schema}

@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, START, END
 
 from app.state import state
 from app.querying_db import execute_sql, validate_sql_syntax 
-from app.services.schema_service import get_metadata
+# from app.services.schema_service import get_metadata
 from app.nodes.generate_answer_node import  generate_answer
 from app.nodes.clarification_node  import clarification_node
 from app.nodes.generate_sql_node import generate_sql

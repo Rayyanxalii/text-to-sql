@@ -2,7 +2,9 @@ from pydantic import BaseModel, Field
 from typing import Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
+from app.services.schema_service import get_metadata
 
+metadata = get_metadata()
 
 class state(BaseModel):
     messages : Annotated[list[AnyMessage], add_messages] = Field(default_factory = list)
@@ -15,7 +17,7 @@ class state(BaseModel):
 
     is_clear: bool = False
 
-    db_schema: str = ""
+    db_schema: str = metadata
     sql: str = ""
 
     sql_valid: bool = False
@@ -27,7 +29,7 @@ class state(BaseModel):
     semantic_error: bool | None = None
     semantic_error_reason: str | None = None
 
-    db_result: list[tuple] = []
+    db_result: list[tuple] | None = None
     sql_execution_error: str | None = None
 
     answer: str = ""
