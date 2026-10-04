@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from app.graph import graph_view as graph
+from app.graph import graph_view as graph, pool
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
 
@@ -14,10 +14,22 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+def startup_event():
+    print("Starting up the Text-to-SQL")
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    pool.close()
+
+
 class QueryRequest(BaseModel):
     question: str | None = None
     clarification_answer: str | None = None
     conversation_id: str
+
+
 
 
 @app.get("/")

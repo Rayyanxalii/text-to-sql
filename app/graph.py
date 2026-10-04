@@ -1,5 +1,4 @@
 from langgraph.graph import StateGraph, START, END
-
 from app.state import state
 from app.querying_db import execute_sql, validate_sql_syntax 
 # from app.services.schema_service import get_metadata
@@ -9,12 +8,16 @@ from app.nodes.generate_sql_node import generate_sql
 from app.nodes.ask_user_node import ask_user
 from app.nodes.correct_sql_syntax_node import correct_sql_syntax
 from app.nodes.validate_sql_semantic_node import validate_sql_semantic
+from langgraph.checkpoint.postgres import PostgresSaver
+from psycopg_pool import ConnectionPool
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 
-from langgraph.checkpoint.memory import InMemorySaver
 
+DB_URI = os.getenv("DB_URI")
 
-checkpointer = InMemorySaver()
     
 
 graph = StateGraph(state)
@@ -69,8 +72,16 @@ graph.add_edge('execute_sql', 'generate_answer')
 graph.add_edge('generate_answer', END)
 
 
-graph_view = graph.compile(checkpointer = checkpointer)
+pool = ConnectionPool(
+    conninfo=DB_URI,
+    max_size=20,
+    kwargs={"autocommit": True, "prepare_threshold": 0},
+)
 
+checkpointer = PostgresSaver(pool)
+checkpointer.setup()
+
+graph_view = graph.compile(checkpointer=checkpointer)
 
 # png_data = graph_view.get_graph().draw_mermaid_png()
 
