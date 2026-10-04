@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from app.graph import graph_view as graph, pool
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
+from app.services.redis_service import get_cache, set_cache
 
 
 # schema = get_metadata()
@@ -38,6 +39,7 @@ def root():
         "message": "Text-to-SQL API is running"
     }
     
+
 
 def format_graph_output(result, conversation_id: str):
     if not isinstance(result, dict):
@@ -117,12 +119,19 @@ def query_database(request: QueryRequest):
                 "sql_execution_error": None,
                 "answer": "",
             }
+            
+            cached = get_cache(request.question)
+            if cached:
+                print('Cache hit')
+                return format_graph_output({"answer": cached}, request.conversation_id)
+            
+            print('Cache miss')
             result = graph.invoke(initial_state, config=config)
         else:
             raise HTTPException(
                 status_code=400,
                 detail="Question is required for a new query."
             )
-        
+    set_cache(request.question, result['answer'],300)
     return format_graph_output(result, request.conversation_id)
 
