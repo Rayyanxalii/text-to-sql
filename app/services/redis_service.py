@@ -14,3 +14,7 @@ def get_cache(key):
 
 def set_cache(key, value, ttl=300):
     redis_client.setex(key, ttl, value)
+    
+    
+def normalize_question(question: str) -> str:
+    return question.strip().lower()

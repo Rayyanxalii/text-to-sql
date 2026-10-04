@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from app.graph import graph_view as graph, pool
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
-from app.services.redis_service import get_cache, set_cache
+from app.services.redis_service import get_cache, set_cache, normalize_question
 
 
 # schema = get_metadata()
@@ -120,7 +120,7 @@ def query_database(request: QueryRequest):
                 "answer": "",
             }
             
-            cached = get_cache(request.question)
+            cached = get_cache(normalize_question(request.question))
             if cached:
                 print('Cache hit')
                 return format_graph_output({"answer": cached}, request.conversation_id)
@@ -132,6 +132,6 @@ def query_database(request: QueryRequest):
                 status_code=400,
                 detail="Question is required for a new query."
             )
-    set_cache(request.question, result['answer'],300)
+    set_cache(normalize_question(request.question), result['answer'],300)
     return format_graph_output(result, request.conversation_id)
 
