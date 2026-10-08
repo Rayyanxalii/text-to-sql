@@ -3,7 +3,8 @@ from pydantic import BaseModel
 from app.graph import graph_view as graph, pool
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
-from app.services.redis_service import get_cache, set_cache, normalize_question
+from app.services.redis_service import check_semantic_cache, store_semantic_cache
+from app.structured_ouput import QueryFilters
 
 
 # schema = get_metadata()
@@ -86,6 +87,9 @@ def query_database(request: QueryRequest):
     has_interrupt = any(bool(task.interrupts) for task in tasks) or bool(getattr(snapshot, 'interrupts', False))
     
     if has_interrupt:
+        # ------------------------------------------------------------------ #
+        # Resuming after a clarification interrupt                            #
+        # ------------------------------------------------------------------ #
         if request.clarification_answer:
             command = Command(resume=request.clarification_answer)
             result = graph.invoke(command, config=config)
@@ -95,43 +99,72 @@ def query_database(request: QueryRequest):
                 detail="Clarification answer required to resume the query."
             )
     else:
+        # ------------------------------------------------------------------ #
+        # Fresh question                                                      #
+        # ------------------------------------------------------------------ #
         if request.clarification_answer:
             raise HTTPException(
                 status_code=409,
                 detail="No pending clarification to resume."
             )
-        if request.question:
-            initial_state = {
-                "question": request.question,
-                "messages": [HumanMessage(content=request.question)],
-                "user_clarification": None,
-                "clarification_question": None,
-                "clarification_reason": None,
-                "is_clear": False,
-                "sql": "",
-                "sql_valid": False,
-                "sql_valid_error": None,
-                "ask_user_count": 0,
-                "correct_sql_count": 0,
-                "semantic_error": None,
-                "semantic_error_reason": None,
-                "db_result": None,
-                "sql_execution_error": None,
-                "answer": "",
-            }
-            
-            cached = get_cache(normalize_question(request.question))
-            if cached:
-                print('Cache hit')
-                return format_graph_output({"answer": cached}, request.conversation_id)
-            
-            print('Cache miss')
-            result = graph.invoke(initial_state, config=config)
-        else:
+        if not request.question:
             raise HTTPException(
                 status_code=400,
                 detail="Question is required for a new query."
             )
-    set_cache(normalize_question(request.question), result['answer'],300)
+
+        # --- Semantic cache check (pre-graph) ---
+        # Use the raw question with empty filters for the initial lookup.
+        # The extract_filters node will produce the precise filters later;
+        # here we rely purely on vector similarity + empty-filter match so
+        # only previously-cached identical-intent AND identical-value queries
+        # are served from cache.
+        raw_filters = QueryFilters(resolved_prompt=request.question)
+        cached_answer = check_semantic_cache(request.question, raw_filters)
+
+        if cached_answer:
+            print("[Cache HIT] Returning cached answer without running graph.")
+            return format_graph_output({"answer": cached_answer}, request.conversation_id)
+
+        print("[Cache MISS] Running full graph pipeline.")
+        initial_state = {
+            "question": request.question,
+            "messages": [HumanMessage(content=request.question)],
+            "user_clarification": None,
+            "clarification_question": None,
+            "clarification_reason": None,
+            "is_clear": False,
+            "sql": "",
+            "sql_valid": False,
+            "sql_valid_error": None,
+            "ask_user_count": 0,
+            "correct_sql_count": 0,
+            "semantic_error": None,
+            "semantic_error_reason": None,
+            "db_result": None,
+            "sql_execution_error": None,
+            "answer": "",
+            "query_filters": None,
+        }
+        result = graph.invoke(initial_state, config=config)
+
+    # ---------------------------------------------------------------------- #
+    # Store in semantic cache (both fresh and resumed paths land here)        #
+    # ---------------------------------------------------------------------- #
+    if isinstance(result, dict):
+        answer = result.get("answer", "")
+        qf: QueryFilters | None = result.get("query_filters")
+
+        # Only cache when we have a real answer and extracted filters.
+        # If the graph was interrupted (clarification pending) qf will be None
+        # and we skip caching until the final answer is produced.
+        if answer and qf:
+            store_semantic_cache(
+                resolved_prompt=qf.resolved_prompt,
+                answer=answer,
+                qf=qf,
+            )
+
     return format_graph_output(result, request.conversation_id)
+
 

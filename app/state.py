@@ -1,8 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import Annotated
+from typing import Annotated, Optional
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from app.services.schema_service import get_metadata
+from app.structured_ouput import QueryFilters
 
 metadata = get_metadata()
 
@@ -33,3 +34,7 @@ class state(BaseModel):
     sql_execution_error: str | None = None
 
     answer: str = ""
+
+    # Populated by extract_filters_node after clarification is resolved.
+    # Used by the semantic cache store/check in main.py.
+    query_filters: Optional[QueryFilters] = None
