@@ -36,5 +36,9 @@ class state(BaseModel):
     answer: str = ""
 
     # Populated by extract_filters_node after clarification is resolved.
-    # Used by the semantic cache store/check in main.py.
+    # Used by check_cache_node for lookup and by main.py for storing.
     query_filters: Optional[QueryFilters] = None
+
+    # Set by check_cache_node. True = answer already populated from cache,
+    # graph should jump to END. False = proceed to generate_sql.
+    cache_hit: bool = False

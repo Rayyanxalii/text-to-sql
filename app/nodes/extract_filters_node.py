@@ -25,12 +25,16 @@ _EXTRACT_PROMPT = ChatPromptTemplate.from_messages([
         (
             "Original question: {question}\n"
             "User clarification (if any): {user_clarification}\n\n"
-            "Extract the filters and write the resolved_prompt."
+            "Extract the filters and write the resolved_prompt. "
+            "Respond with a JSON object with these exact keys: "
+            "\"years\" (list of ints), \"numbers\" (list of floats), "
+            "\"entities\" (list of strings), \"date_ranges\" (list of strings), "
+            "\"resolved_prompt\" (string)."
         ),
     ),
 ])
 
-_extractor = _EXTRACT_PROMPT | llm.with_structured_output(QueryFilters)
+_extractor = _EXTRACT_PROMPT | llm.with_structured_output(QueryFilters, method="json_mode")
 
 
 def extract_query_filters(graph_state: state) -> dict:

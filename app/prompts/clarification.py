@@ -159,6 +159,12 @@ User's previous clarification:
     MessagesPlaceholder(variable_name="messages"),
     (
         "human",
-        "Based on the conversation and any clarifications provided, evaluate whether the user's intent is clear enough to construct SQL. Return your assessment."
+        (
+            "Based on the conversation and any clarifications provided, evaluate whether the user's intent is clear enough to construct SQL.\n\n"
+            "Respond with a JSON object with these exact keys:\n"
+            "- \"is_clear\": boolean\n"
+            "- \"clarification_question\": string or null\n"
+            "- \"reason\": string"
+        )
     )
 ])

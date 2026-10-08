@@ -9,6 +9,7 @@ from app.nodes.ask_user_node import ask_user
 from app.nodes.correct_sql_syntax_node import correct_sql_syntax
 from app.nodes.validate_sql_semantic_node import validate_sql_semantic
 from app.nodes.extract_filters_node import extract_query_filters
+from app.nodes.check_cache_node import check_cache_node
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 import os
@@ -25,8 +26,9 @@ graph = StateGraph(state)
 
 graph.add_node("clarification", clarification_node)
 graph.add_node("ask_user", ask_user)
-graph.add_node("extract_filters", extract_query_filters)   # ← NEW
-graph.add_node('generate_answer',generate_answer )
+graph.add_node("extract_filters", extract_query_filters)
+graph.add_node("check_cache", check_cache_node)           # ← NEW
+graph.add_node('generate_answer', generate_answer)
 graph.add_node('generate_sql', generate_sql)
 graph.add_node('validate_sql_syntax', validate_sql_syntax)
 graph.add_node('correct_sql_syntax', correct_sql_syntax)
@@ -37,16 +39,26 @@ graph.add_node('execute_sql', execute_sql)
 graph.add_edge(START, 'clarification')
 graph.add_conditional_edges(
     "clarification",
-    lambda x : "extract_filters" if x.is_clear == True or x.ask_user_count >= 3 else "ask_user",
+    lambda x: "extract_filters" if x.is_clear == True or x.ask_user_count >= 3 else "ask_user",
     {
         "ask_user": "ask_user",
-        "extract_filters": "extract_filters",   # ← was "generate_sql"
+        "extract_filters": "extract_filters",
     }
 )
 graph.add_edge("ask_user", "clarification")
 
-# extract_filters feeds straight into generate_sql
-graph.add_edge("extract_filters", "generate_sql")   # ← NEW
+# extract_filters → check_cache
+graph.add_edge("extract_filters", "check_cache")
+
+# check_cache → END (hit) or generate_sql (miss)
+graph.add_conditional_edges(
+    "check_cache",
+    lambda x: END if x.cache_hit else "generate_sql",
+    {
+        END: END,
+        "generate_sql": "generate_sql",
+    }
+)
 
 graph.add_edge('generate_sql', 'validate_sql_syntax')
 graph.add_conditional_edges(
@@ -75,9 +87,9 @@ checkpointer.setup()
 
 graph_view = graph.compile(checkpointer=checkpointer)
 
-png_data = graph_view.get_graph().draw_mermaid_png()
+# png_data = graph_view.get_graph().draw_mermaid_png()
 
 
-with open("graph.png", "wb") as f:
-    f.write(png_data)
+# with open("graph.png", "wb") as f:
+#     f.write(png_data)
     

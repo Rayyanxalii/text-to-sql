@@ -12,7 +12,7 @@ def clarification_node(graph_state: state) -> str:
     messages = graph_state.messages
     question = graph_state.question
         
-    structured_llm = llm.with_structured_output(ClarificationResult)
+    structured_llm = llm.with_structured_output(ClarificationResult, method="json_mode")
     
     clarification_chain = clarification_prompt | structured_llm 
     

@@ -56,10 +56,11 @@ def check_semantic_cache(resolved_prompt: str, qf: QueryFilters) -> str | None:
         # Every filter dimension must match exactly.
         if all(stored.get(k) == v for k, v in expected.items()):
             print(f"[Cache HIT]  distance={hit.get('vector_distance'):.4f}  filters={expected}")
-            return hit["response"]
+            return hit.get('response')
 
     print(f"[Cache MISS] semantic neighbours found but filters did not match. expected={expected}")
     return None
+
 
 
 def store_semantic_cache(resolved_prompt: str, answer: str, qf: QueryFilters) -> None:

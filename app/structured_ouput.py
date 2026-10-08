@@ -6,7 +6,8 @@ class ClarificationResult(BaseModel):
         description="Whether the user's question contains enough information to generate SQL."
     )
     clarification_question: str | None = Field(
-        description="A question to ask the user if the request is unclear."
+        default=None,
+        description="A question to ask the user if the request is unclear. Must be None if is_clear is True."
     )
     reason: str = Field(
         description="Brief explanation of why the question is clear or unclear."
@@ -26,7 +27,10 @@ class semantic_result(BaseModel):
     semantic_error : bool = Field(
         description="Whether there was a semantic error in the SQL query.")
     
-    semantic_error_reason : str | None = Field( description="A brief explanation of the semantic error in the SQL query.")
+    semantic_error_reason : str | None = Field(
+        default=None,
+        description="A brief explanation of the semantic error in the SQL query. Must be None if semantic_error is False."
+    )
 
 
 
