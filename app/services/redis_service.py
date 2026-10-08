@@ -17,6 +17,7 @@ semantic_cache = SemanticCache(
     # Exact-value differences (year, numbers) are caught by the filter guard
     # below, so we can afford a slightly generous threshold here.
     distance_threshold=0.12,
+    ttl = 360
 )
 
 
