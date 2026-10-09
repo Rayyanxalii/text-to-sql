@@ -62,7 +62,7 @@ graph.add_conditional_edges(
         "extract_filters": "extract_filters",
     }
 )
-graph.add_edge("ask_user", "clarification")
+graph.add_edge("ask_user", "input_guard")
 
 # extract_filters → check_cache
 graph.add_edge("extract_filters", "check_cache")
