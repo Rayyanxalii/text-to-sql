@@ -4,6 +4,7 @@ from app.state import state
 
 
 def validate_sql_syntax(graph_state : state):
+    print("\n========== ENTERED VALIDATE SQL SYNTAX ==========")
     sql = graph_state.sql
     
     try: 
@@ -28,7 +29,7 @@ def validate_sql_syntax(graph_state : state):
         
 
 def execute_sql(graph_state : state):
-    
+    print("\n========== ENTERED EXECUTE SQL ==========")
     sql = graph_state.sql
     
     try: 

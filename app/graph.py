@@ -1,7 +1,13 @@
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from langgraph.graph import StateGraph, START, END
 from app.state import state
 from app.querying_db import execute_sql, validate_sql_syntax 
-# from app.services.schema_service import get_metadata
 from app.nodes.generate_answer_node import  generate_answer
 from app.nodes.clarification_node  import clarification_node
 from app.nodes.generate_sql_node import generate_sql
@@ -10,6 +16,7 @@ from app.nodes.correct_sql_syntax_node import correct_sql_syntax
 from app.nodes.validate_sql_semantic_node import validate_sql_semantic
 from app.nodes.extract_filters_node import extract_query_filters
 from app.nodes.check_cache_node import check_cache_node
+from app.nodes.input_guard_node import input_guard_node
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 import os
@@ -27,16 +34,26 @@ graph = StateGraph(state)
 graph.add_node("clarification", clarification_node)
 graph.add_node("ask_user", ask_user)
 graph.add_node("extract_filters", extract_query_filters)
-graph.add_node("check_cache", check_cache_node)           # ← NEW
+graph.add_node("check_cache", check_cache_node)           
 graph.add_node('generate_answer', generate_answer)
 graph.add_node('generate_sql', generate_sql)
 graph.add_node('validate_sql_syntax', validate_sql_syntax)
 graph.add_node('correct_sql_syntax', correct_sql_syntax)
 graph.add_node('validate_sql_semantic', validate_sql_semantic)
 graph.add_node('execute_sql', execute_sql)
+graph.add_node('input_guard', input_guard_node) 
 
 
-graph.add_edge(START, 'clarification')
+graph.add_edge(START, 'input_guard')
+graph.add_conditional_edges(
+    "input_guard",
+    lambda x: "clarification" if x.input_safe and not x.is_greeting else "generate_answer",
+    {
+        "clarification": "clarification",
+        "generate_answer": "generate_answer",
+    }
+)
+
 graph.add_conditional_edges(
     "clarification",
     lambda x: "extract_filters" if x.is_clear == True or x.ask_user_count >= 3 else "ask_user",
@@ -87,9 +104,9 @@ checkpointer.setup()
 
 graph_view = graph.compile(checkpointer=checkpointer)
 
-# png_data = graph_view.get_graph().draw_mermaid_png()
+png_data = graph_view.get_graph().draw_mermaid_png()
 
 
-# with open("graph.png", "wb") as f:
-#     f.write(png_data)
+with open("graph.png", "wb") as f:
+    f.write(png_data)
     

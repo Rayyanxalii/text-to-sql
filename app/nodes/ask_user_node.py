@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 
 def ask_user(graph_state: state) -> str:
+    print("\n========== ENTERED ASK USER ==========")
     clarification_question = graph_state.clarification_question or "Could you clarify your request?"
 
     user_clarification = interrupt(clarification_question)

@@ -1,3 +1,10 @@
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from app.graph import graph_view as graph, pool
@@ -66,6 +73,9 @@ def format_graph_output(result, conversation_id: str):
     return output["answer"] if "answer" in output else "No answer generated"
 
 
+
+
+
 @app.post("/query")
 def query_database(request: QueryRequest):
     config = {
@@ -107,6 +117,21 @@ def query_database(request: QueryRequest):
                 detail="Question is required for a new query.",
             )
 
+        # ------------------------------------------------------------------ #
+        # Check whether this is a new or returning conversation.             #
+        # LangGraph's PostgresSaver stores the full message history in       #
+        # Postgres against the thread_id (conversation_id).                  #
+        #                                                                    #
+        # • Returning user → checkpoint already has prior messages.          #
+        #   The add_messages reducer will simply APPEND the new              #
+        #   HumanMessage to the existing history — no manual restore needed. #
+        #                                                                    #
+        # • New user → checkpoint is empty, so the single HumanMessage      #
+        #   starts the history from scratch.                                  #
+        # ------------------------------------------------------------------ #
+        is_returning = bool(snapshot.values)
+        print(f"[Session] conversation_id={request.conversation_id} | returning={is_returning}")
+
         initial_state = {
             "question": request.question,
             "messages": [HumanMessage(content=request.question)],
@@ -126,6 +151,7 @@ def query_database(request: QueryRequest):
             "answer": "",
             "query_filters": None,
             "cache_hit": False,
+            "is_greeting": False,
         }
         result = graph.invoke(initial_state, config=config)
 

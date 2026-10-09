@@ -43,6 +43,7 @@ def extract_query_filters(graph_state: state) -> dict:
     Extracts structured filters from the final question + clarification,
     and stores them in state so the cache layer can use them.
     """
+    print("\n========== ENTERED EXTRACT FILTERS ==========")
     result: QueryFilters = _extractor.invoke({
         "question": graph_state.question,
         "user_clarification": graph_state.user_clarification or "",

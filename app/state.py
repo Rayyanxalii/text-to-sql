@@ -44,5 +44,6 @@ class state(BaseModel):
     cache_hit: bool = False
     
     
-    is_safe : bool = False
-    is_safe_reason : str | None = None
+    input_safe : bool = False
+    input_safe_reason : str | None = None
+    is_greeting: bool = False

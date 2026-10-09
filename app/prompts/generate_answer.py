@@ -29,6 +29,9 @@ Database Result:
 User Clarification:
 {user_clarification}
 
+SQL Error:
+{sql_execution_error}
+
 Instructions:
 
 1. Answer the user's current question using the Database Result.
@@ -43,7 +46,7 @@ Instructions:
 6. If SQL Error is not null or empty, do not attempt to answer from the
    Database Result. Instead, briefly explain that the query could not
    be executed.
-7. Keep the answer concise and directly relevant to the user's question.
+7. Keep the answer concise, professional, and directly relevant to the user's question.
 8. When the result contains multiple records, present them in a clear
    and readable format.
 9. If the user asks for a count, total, average, maximum, minimum, or

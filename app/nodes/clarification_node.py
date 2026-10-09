@@ -5,7 +5,7 @@ from app.prompts.clarification import clarification_prompt
 from langchain_core.messages import AIMessage
 
 def clarification_node(graph_state: state) -> str:
-      
+    print("\n========== ENTERED CLARIFICATION ==========")
     clarification_question = graph_state.clarification_question
     schema = graph_state.db_schema
     user_clarification = graph_state.user_clarification or ""

@@ -8,11 +8,14 @@ def clean_sql(text: str) -> str:
     text = text.strip()
     match = re.search(r"```(?:sql)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
     if match:
-        return match.group(1).strip()
-    return text.strip()
+        text = match.group(1).strip()
+    # Strip any leading EXPLAIN / EXPLAIN ANALYZE that the model might have copied from the error
+    text = re.sub(r"^\s*EXPLAIN(\s+ANALYZE|\s+VERBOSE)?\s+", "", text, flags=re.IGNORECASE).strip()
+    return text
 
 
 def correct_sql_syntax(graph_state: state) -> dict:
+    print("\n========== ENTERED CORRECT SQL SYNTAX ==========")
     question = graph_state.question
     schema = graph_state.db_schema
     user_clarification = graph_state.user_clarification or ""

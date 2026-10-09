@@ -13,6 +13,7 @@ def check_cache_node(graph_state: state) -> dict:
       • cache_hit = True  + answer = <cached string>  → conditional edge routes to END
       • cache_hit = False                             → conditional edge routes to generate_sql
     """
+    print("\n========== ENTERED CHECK CACHE ==========")
     qf = graph_state.query_filters
 
     # Safety: if filters weren't extracted for some reason, treat as a miss.
