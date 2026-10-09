@@ -42,3 +42,7 @@ class state(BaseModel):
     # Set by check_cache_node. True = answer already populated from cache,
     # graph should jump to END. False = proceed to generate_sql.
     cache_hit: bool = False
+    
+    
+    is_safe : bool = False
+    is_safe_reason : str | None = None
