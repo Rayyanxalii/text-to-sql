@@ -27,12 +27,9 @@ def generate_answer(graph_state: state):
             "messages": [AIMessage(content=greeting_text)],
         }
 
-    # 2. Blocked inputs: return a clear, polite rejection message immediately
+    # 2. Blocked inputs (from input_guard or meta_guard): return a hardcoded rejection message
     if not input_safe:
-        rejection_text = (
-            "I'm sorry, but I cannot process this request as it contains "
-            "restricted instructions or violates safety guidelines."
-        )
+        rejection_text = "I'm sorry, but I cannot answer this request as it violates safety guidelines."
         return {
             "answer": rejection_text,
             "messages": [AIMessage(content=rejection_text)],

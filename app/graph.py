@@ -17,6 +17,7 @@ from app.nodes.validate_sql_semantic_node import validate_sql_semantic
 from app.nodes.extract_filters_node import extract_query_filters
 from app.nodes.check_cache_node import check_cache_node
 from app.nodes.input_guard_node import input_guard_node
+from app.nodes.meta_guard_node import meta_guard_node
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 import os
@@ -42,12 +43,22 @@ graph.add_node('correct_sql_syntax', correct_sql_syntax)
 graph.add_node('validate_sql_semantic', validate_sql_semantic)
 graph.add_node('execute_sql', execute_sql)
 graph.add_node('input_guard', input_guard_node) 
+graph.add_node('meta_guard', meta_guard_node)
 
 
 graph.add_edge(START, 'input_guard')
 graph.add_conditional_edges(
     "input_guard",
-    lambda x: "clarification" if x.input_safe and not x.is_greeting else "generate_answer",
+    lambda x: "generate_answer" if (not x.input_safe or x.is_greeting) else "meta_guard",
+    {
+        "meta_guard": "meta_guard",
+        "generate_answer": "generate_answer",
+    }
+)
+
+graph.add_conditional_edges(
+    "meta_guard",
+    lambda x: "clarification" if x.input_safe else "generate_answer",
     {
         "clarification": "clarification",
         "generate_answer": "generate_answer",
