@@ -10,7 +10,6 @@ metadata.reflect(bind=engine)
 meta_data = []
 
 
-
 # getting info about the database tables
 
 def get_metadata():
@@ -28,5 +27,3 @@ def get_metadata():
             schema += f"  - {column.name} ({column.type})\n"
 
     return schema
-
-

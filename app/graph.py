@@ -91,8 +91,9 @@ graph.add_conditional_edges(
 graph.add_edge('generate_sql', 'validate_sql_syntax')
 graph.add_conditional_edges(
     "validate_sql_syntax",
-    lambda x: "correct_sql_syntax" if x.sql_valid == False and x.correct_sql_count < 3 else "validate_sql_semantic",
+    lambda x: "generate_answer" if x.permission_denied == True else "correct_sql_syntax" if x.sql_valid == False and x.correct_sql_count < 3 else "validate_sql_semantic",
     {
+        "generate_answer": "generate_answer",
         "correct_sql_syntax": "correct_sql_syntax",
         "validate_sql_semantic": "validate_sql_semantic"
     }

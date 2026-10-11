@@ -15,6 +15,7 @@ def generate_answer(graph_state: state):
     input_safe_reason = graph_state.input_safe_reason
     is_greeting = graph_state.is_greeting
     sql_execution_error = graph_state.sql_execution_error
+    permission_denied = graph_state.permission_denied
 
     # 1. Greetings: return a friendly greeting immediately without an expensive/brittle LLM call
     if is_greeting:
@@ -33,6 +34,13 @@ def generate_answer(graph_state: state):
         return {
             "answer": rejection_text,
             "messages": [AIMessage(content=rejection_text)],
+        }
+        
+    if permission_denied:
+        permission_denied_text = "I'm sorry, but you do not have permission to execute this query."
+        return {
+            "answer": permission_denied_text,
+            "messages": [AIMessage(content=permission_denied_text)],
         }
 
     # 3. For database queries, use a sliding window of recent messages (last 10)

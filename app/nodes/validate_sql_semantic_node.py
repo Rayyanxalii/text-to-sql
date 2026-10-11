@@ -26,14 +26,18 @@ def validate_sql_semantic(graph_state: state):
         })
         semantic_err = result.get("semantic_error", False) if isinstance(result, dict) else getattr(result, "semantic_error", False)
         semantic_err_reason = result.get("semantic_error_reason", None) if isinstance(result, dict) else getattr(result, "semantic_error_reason", None)
+        # permission_denied = result.get("permission_denied", False) if isinstance(result, dict) else getattr(result, "permission_denied", False)
+        
     except Exception as e:
         print(f"[validate_sql_semantic] Evaluation parsing failed ({e}). Defaulting to semantic_error=False.")
         semantic_err = False
         semantic_err_reason = None
 
-    print(f"[validate_sql_semantic] semantic_error={semantic_err}, reason={semantic_err_reason}")
+    print(f"[validate_sql_semantic] semantic_error={semantic_err}, reason={semantic_err_reason} permission_denied={permission_denied}")
 
     return {
         "semantic_error": semantic_err,
         "semantic_error_reason": semantic_err_reason,
+        # 'permission_denied' : permission_denied
     }
+    

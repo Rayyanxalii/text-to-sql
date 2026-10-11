@@ -14,7 +14,8 @@ def validate_sql_syntax(graph_state : state):
         
         return {
             "sql_valid": True,
-            "sql_valid_error": ""
+            "sql_valid_error": "",
+            'permsission_denied' : False
         }
         
     except Exception as e:
@@ -23,7 +24,8 @@ def validate_sql_syntax(graph_state : state):
         
         return{
             'sql_valid': False,
-            'sql_valid_error': str(e)
+            'sql_valid_error': str(e),
+            'permission_denied' : 
         }
         
         

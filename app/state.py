@@ -47,3 +47,7 @@ class state(BaseModel):
     input_safe : bool = False
     input_safe_reason : str | None = None
     is_greeting: bool = False
+    
+    permission_denied : bool = False
+    
+    

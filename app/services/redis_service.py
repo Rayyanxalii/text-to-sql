@@ -61,7 +61,6 @@ def check_semantic_cache(resolved_prompt: str, qf: QueryFilters) -> str | None:
     """
     Look up the cache using the resolved (post-clarification) prompt plus
     exact filter matching on years / numbers / entities / date_ranges.
-
     Returns the cached answer string, or None on a miss or connection failure.
     """
     cache = get_semantic_cache()

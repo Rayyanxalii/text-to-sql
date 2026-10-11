@@ -32,6 +32,10 @@ class semantic_result(BaseModel):
         description="A brief explanation of the semantic error in the SQL query. Must be None if semantic_error is False."
     )
 
+    # permission_denied : bool = Field(
+    #     default = False,
+    #     description="Whether the SQL query was denied due to insufficient permissions."
+    # )
 
 
 
