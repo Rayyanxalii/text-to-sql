@@ -1,6 +1,26 @@
 from sqlalchemy import text
 from app.db.database import engine
 from app.state import state
+from psycopg.errors import InsufficientPrivilege
+
+
+# try:
+#     from psycopg.errors import InsufficientPrivilege
+# except ImportError:
+#     try:
+#         from psycopg2.errors import InsufficientPrivilege
+#     except ImportError:
+#         InsufficientPrivilege = None
+
+
+def _check_permission_denied(error: Exception) -> bool:
+    if InsufficientPrivilege is not None:
+        if isinstance(getattr(error, "orig", None), InsufficientPrivilege) or isinstance(error, InsufficientPrivilege):
+            return True
+    err_str = str(error).lower()
+    return "permission denied" in err_str or "insufficientprivilege" in err_str
+
+
 
 
 def validate_sql_syntax(graph_state : state):
@@ -11,21 +31,22 @@ def validate_sql_syntax(graph_state : state):
         with engine.connect() as conn:
             conn.execute(text(f"EXPLAIN {sql}"))
             
-        
         return {
             "sql_valid": True,
             "sql_valid_error": "",
-            'permsission_denied' : False
+            'permission_denied': False
         }
         
     except Exception as e:
         print('\n Sql Error')
         print(e)
         
-        return{
+        permission_denied = _check_permission_denied(e)
+        
+        return {
             'sql_valid': False,
             'sql_valid_error': str(e),
-            'permission_denied' : 
+            'permission_denied': permission_denied
         }
         
         
@@ -53,7 +74,8 @@ def execute_sql(graph_state : state):
         print(f'Error occurred during sql execution. Error: {e}')
         return {
             'db_result': None,
-            'sql_execution_error': str(e)
+            'sql_execution_error': str(e),
+            'permission_denied': _check_permission_denied(e)
         }
 
         
