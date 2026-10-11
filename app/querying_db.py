@@ -4,19 +4,15 @@ from app.state import state
 from psycopg.errors import InsufficientPrivilege
 
 
-# try:
-#     from psycopg.errors import InsufficientPrivilege
-# except ImportError:
-#     try:
-#         from psycopg2.errors import InsufficientPrivilege
-#     except ImportError:
-#         InsufficientPrivilege = None
-
-
+# Check if the error is a permission denied error
 def _check_permission_denied(error: Exception) -> bool:
+    if error is None:
+        return False
+    
     if InsufficientPrivilege is not None:
         if isinstance(getattr(error, "orig", None), InsufficientPrivilege) or isinstance(error, InsufficientPrivilege):
             return True
+        
     err_str = str(error).lower()
     return "permission denied" in err_str or "insufficientprivilege" in err_str
 
@@ -39,9 +35,9 @@ def validate_sql_syntax(graph_state : state):
         
     except Exception as e:
         print('\n Sql Error')
-        print(e)
-        
         permission_denied = _check_permission_denied(e)
+        
+        print(f"[validate_sql_syntax] SQL validation failed. Error: {e}. \n Permission denied: {permission_denied}")
         
         return {
             'sql_valid': False,
