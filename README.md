@@ -86,7 +86,7 @@ flowchart TD
 text-to-sql/
 ├── app/
 │   ├── db/
-│   │   └── database.py                  # SQLAlchemy engine initialization
+│   │   └── database.py                  # SQLAlchemy engine — reads READONLY_DATABASE_URL
 │   ├── guardrails/
 │   │   ├── input_guard.py               # Regex-based injection / jailbreak / SQL attack detection
 │   │   ├── meta_guard.py                # DeBERTa-v3 ML prompt-injection classifier
@@ -134,7 +134,7 @@ text-to-sql/
 |---|---|
 | API Framework | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn |
 | Agent Orchestration | [LangGraph](https://langchain-ai.github.io/langgraph/) & [LangChain Core](https://python.langchain.com/) |
-| LLM Providers | [Groq](https://groq.com/) (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`), Ollama, Google Gemini |
+| LLM Providers | [Groq](https://groq.com/) (`openai/gpt-oss-120b` primary, `openai/gpt-oss-20b` evaluator) · [Google Gemini](https://ai.google.dev/) (`gemini-2.5-flash`) · [Ollama](https://ollama.com/) (`qwen2.5-coder:7b`) — switchable in `llm_service.py` |
 | Semantic Caching & Vectors | [RedisVL](https://redisvl.com/) with Redis Stack & `nomic-embed-text` embeddings |
 | Database & Persistence | [PostgreSQL](https://www.postgresql.org/) via [SQLAlchemy](https://www.sqlalchemy.org/), `psycopg_pool`, `PostgresSaver` |
 | Input Security | Regex rules + [DeBERTa-v3](https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2) (HuggingFace Transformers) |
@@ -162,15 +162,17 @@ text-to-sql/
 Create a `.env` file in the project root:
 
 ```env
-# Database connection strings
-DATABASE_URL=postgresql://username:password@localhost:5432/your_database
+# Used by PostgresSaver (LangGraph checkpointing) — needs read/write access
 DB_URI=postgresql://username:password@localhost:5432/your_database
+
+# Used by SQLAlchemy engine for query execution — use a read-only DB user
+READONLY_DATABASE_URL=postgresql+psycopg://readonly_user:password@localhost:5432/your_database
 
 # LLM Providers
 GROQ_API_KEY=your_groq_api_key
 
-# Optional: Ollama / Google GenAI keys if using alternative providers
-# GEMINI_API_KEY=your_gemini_key
+# Optional: Google GenAI key if switching to Gemini
+GOOGLE_API_KEY=your_google_api_key
 ```
 
 ### 3. Installation
