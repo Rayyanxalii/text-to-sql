@@ -16,6 +16,7 @@ def generate_answer(graph_state: state):
     is_greeting = graph_state.is_greeting
     sql_execution_error = graph_state.sql_execution_error
     permission_denied = graph_state.permission_denied
+    sql_valid = graph_state.sql_valid
 
     # 1. Greetings: return a friendly greeting immediately without an expensive/brittle LLM call
     if is_greeting:
@@ -35,7 +36,18 @@ def generate_answer(graph_state: state):
             "answer": rejection_text,
             "messages": [AIMessage(content=rejection_text)],
         }
-        
+
+    # 3. SQL blocked by the structural safety check (sqlglot): reject before execution
+    if not sql_valid:
+        sql_safety_text = (
+            "I'm sorry, but your request could not be completed. "
+            "SQL security is in charge — the generated query was flagged as unsafe and was not executed."
+        )
+        return {
+            "answer": sql_safety_text,
+            "messages": [AIMessage(content=sql_safety_text)],
+        }
+
     if permission_denied:
         permission_denied_text = "I'm sorry, but you do not have permission to execute this query."
         return {

@@ -18,6 +18,7 @@ from app.nodes.extract_filters_node import extract_query_filters
 from app.nodes.check_cache_node import check_cache_node
 from app.nodes.input_guard_node import input_guard_node
 from app.nodes.meta_guard_node import meta_guard_node
+from app.nodes.sql_safety_node import sql_safety_node
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 import os
@@ -38,6 +39,7 @@ graph.add_node("extract_filters", extract_query_filters)
 graph.add_node("check_cache", check_cache_node)           
 graph.add_node('generate_answer', generate_answer)
 graph.add_node('generate_sql', generate_sql)
+graph.add_node('sql_safety', sql_safety_node)
 graph.add_node('validate_sql_syntax', validate_sql_syntax)
 graph.add_node('correct_sql_syntax', correct_sql_syntax)
 graph.add_node('validate_sql_semantic', validate_sql_semantic)
@@ -88,7 +90,15 @@ graph.add_conditional_edges(
     }
 )
 
-graph.add_edge('generate_sql', 'validate_sql_syntax')
+graph.add_edge('generate_sql', 'sql_safety')
+graph.add_conditional_edges(
+    'sql_safety',
+    lambda x: 'generate_answer' if not x.sql_valid else 'validate_sql_syntax',
+    {
+        'generate_answer': 'generate_answer',
+        'validate_sql_syntax': 'validate_sql_syntax',
+    }
+)
 graph.add_conditional_edges(
     "validate_sql_syntax",
     lambda x: "generate_answer" if x.permission_denied == True else "correct_sql_syntax" if x.sql_valid == False and x.correct_sql_count < 3 else "validate_sql_semantic",
