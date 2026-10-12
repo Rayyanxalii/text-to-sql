@@ -19,6 +19,7 @@ from app.nodes.check_cache_node import check_cache_node
 from app.nodes.input_guard_node import input_guard_node
 from app.nodes.meta_guard_node import meta_guard_node
 from app.nodes.sql_safety_node import sql_safety_node
+from app.nodes.output_guard_node import output_guard_node
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg_pool import ConnectionPool
 import os
@@ -46,6 +47,7 @@ graph.add_node('validate_sql_semantic', validate_sql_semantic)
 graph.add_node('execute_sql', execute_sql)
 graph.add_node('input_guard', input_guard_node) 
 graph.add_node('meta_guard', meta_guard_node)
+graph.add_node('output_guard', output_guard_node)
 
 
 graph.add_edge(START, 'input_guard')
@@ -112,7 +114,8 @@ graph.add_edge('correct_sql_syntax', 'validate_sql_syntax')
 
 graph.add_edge('validate_sql_semantic', 'execute_sql')
 graph.add_edge('execute_sql', 'generate_answer')
-graph.add_edge('generate_answer', END)
+graph.add_edge('generate_answer', 'output_guard')
+graph.add_edge('output_guard', END)
 
 
 pool = ConnectionPool(
