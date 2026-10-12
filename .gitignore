@@ -1,4 +1,3 @@
-.env
-/myenv
-/__pycache__
-
+# Root-level gitignore
+node_modules/
+.DS_Store
