@@ -50,4 +50,7 @@ class state(BaseModel):
     
     permission_denied : bool = False
     
+    answer_harmful : bool = False
+    
+    
     

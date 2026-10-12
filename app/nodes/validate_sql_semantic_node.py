@@ -33,7 +33,7 @@ def validate_sql_semantic(graph_state: state):
         semantic_err = False
         semantic_err_reason = None
 
-    print(f"[validate_sql_semantic] semantic_error={semantic_err}, reason={semantic_err_reason} permission_denied={permission_denied}")
+    print(f"[validate_sql_semantic] semantic_error={semantic_err}, reason={semantic_err_reason}")
 
     return {
         "semantic_error": semantic_err,
