@@ -6,6 +6,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.graph import graph_view as graph, pool
 from langchain_core.messages import HumanMessage
@@ -18,6 +19,18 @@ app = FastAPI(
     title="Text-to-SQL API",
     description="Natural language to SQL system",
     version="1.0.0",
+)
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Allows the frontend (served on any origin during development, e.g. port 3000
+# or opened directly from the filesystem) to call the API on port 8000.
+# In production, replace allow_origins=["*"] with your exact frontend URL.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # dev: all origins; prod: ["https://your-domain.com"]
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
