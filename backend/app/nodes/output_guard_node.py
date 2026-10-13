@@ -26,6 +26,8 @@ def output_guard_node(s: state) -> dict:
     print("\n========== ENTERED OUTPUT GUARD ==========")
 
     is_safe, reason = validate_llm_output(s.answer)
+    
+    print(f"[OutputGuard] is_safe={is_safe}, reason={reason}")
 
     if is_safe:
         return {
