@@ -218,7 +218,7 @@ pip install fastapi uvicorn langgraph langchain-core langchain-groq langchain-ol
     sqlglot presidio-analyzer presidio-anonymizer detoxify transformers
 
 # Start the FastAPI server
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The interactive OpenAPI documentation will be available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
