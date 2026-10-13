@@ -38,6 +38,9 @@ RULES:
 15. If the error is caused by an invalid table or column reference,
     correct it using the provided schema.
 16. The corrected query must be executable by PostgreSQL.
+17. CASE-INSENSITIVITY & TEXT MATCHING:
+    - In PostgreSQL, string comparisons with '=' are case-sensitive and miss casing variations (e.g. 'Pharmacist' vs 'pharmacist').
+    - For text filtering, use case-insensitive matching with ILIKE '%stem%' (e.g. specialization ILIKE '%pharmacist%') instead of strict '=' with exact casing.
 
 DATABASE SCHEMA:
 {schema}
