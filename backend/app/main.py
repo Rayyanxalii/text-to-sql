@@ -5,6 +5,16 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+# Ensure environment variables (.env) are loaded before LangChain/LangGraph initialize
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
+# Purge conflicting agent deployment address variables if set in external shell
+os.environ.pop("LANGSMITH_AGENT_ID", None)
+os.environ.pop("LANGSMITH_AGENT_ENVIRONMENT", None)
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -94,7 +104,12 @@ def query_database(request: QueryRequest):
     config = {
         "configurable": {
             "thread_id": request.conversation_id
-        }
+        },
+        "run_name": "QuerySentinel Pipeline",
+        "tags": ["query-sentinel", "text-to-sql"],
+        "metadata": {
+            "conversation_id": request.conversation_id,
+        },
     }
 
     snapshot = graph.get_state(config)
