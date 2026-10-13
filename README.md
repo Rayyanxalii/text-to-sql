@@ -305,12 +305,3 @@ When `requires_clarification` is `true`, submit the user's answer with the same 
 
 The pipeline resumes execution from the LangGraph checkpoint, runs filter extraction, checks cache, generates and executes SQL, and returns the final response.
 
----
-
-## 🔄 Recent Updates & Changelog
-
-- **Rebranded to QuerySentinel**: Unified project identity and UI under the **QuerySentinel** banner as a dedicated natural language database interface.
-- **Frontend Modularization & Simplification**: Decoupled monolithic markup into modular `index.html`, `app.js`, and `style.css`. Removed unnecessary telemetry clutter and schema explorer widgets to focus on a fast, distraction-free conversational experience with automated charts and table views.
-- **CORS Support**: Integrated FastAPI `CORSMiddleware` in `backend/app/main.py` to allow cross-origin requests from web browsers and local development servers without origin friction.
-- **Dynamic Schema Reflection with Sample Values**: Enhanced `backend/app/services/schema_service.py` to fetch distinct sample values for text columns directly from the active PostgreSQL database, providing accurate schema linking anchors and eliminating LLM column hallucination.
-- **Case-Insensitive & Stem Matching SQL Generation**: Updated generation and correction prompts to enforce PostgreSQL `ILIKE '%stem%'` matching over strict `=` comparisons, resolving empty query responses caused by casing or pluralization mismatches (e.g., "pharmacists" vs `'pharmacist'`).
