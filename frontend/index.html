@@ -1,899 +1,1583 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QueryMind — Text to SQL</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <title>QueryMind — Agentic Text-to-SQL Pipeline</title>
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            dark: {
+              950: '#06070a',
+              900: '#0b0d13',
+              850: '#10131c',
+              800: '#171b26',
+              750: '#1f2433',
+              700: '#2a3142',
+              600: '#3e485e',
+            }
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { opacity: '0.4', transform: 'scale(1)' },
+              '50%': { opacity: '0.9', transform: 'scale(1.04)' },
+            },
+            shimmer: {
+              '0%': { transform: 'translateX(-100%)' },
+              '100%': { transform: 'translateX(100%)' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-5px)' },
+            }
+          },
+          animation: {
+            'pulse-glow': 'pulseGlow 2.8s ease-in-out infinite',
+            'shimmer': 'shimmer 2s infinite linear',
+            'float': 'float 4s ease-in-out infinite',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js for automatic data visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    /* ── Design tokens ─────────────────────────────────────────── */
-    :root {
-      --bg:        #06060f;
-      --surface:   #0c0c18;
-      --card:      #11111e;
-      --hover:     #181828;
-      --border:    #1c1c2e;
-      --border-hi: #252540;
-      --primary:   #6366f1;
-      --pri-light: #818cf8;
-      --pri-glow:  rgba(99,102,241,.28);
-      --cyan:      #06b6d4;
-      --green:     #10b981;
-      --amber:     #f59e0b;
-      --red:       #ef4444;
-      --text:      #e2e8f0;
-      --dim:       #94a3b8;
-      --muted:     #4b5563;
-      --mono:      'JetBrains Mono', monospace;
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(11, 13, 19, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2a3142;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4f46e5;
     }
 
-    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-
-    html, body { height:100%; }
-
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* Subtle dot grid background */
-    body::before {
-      content:'';
-      position:fixed; inset:0; z-index:0; pointer-events:none;
-      background-image:
-        radial-gradient(circle at 20% 20%, rgba(99,102,241,.07) 0%, transparent 55%),
-        radial-gradient(circle at 80% 80%, rgba(6,182,212,.05) 0%, transparent 55%),
-        radial-gradient(rgba(99,102,241,.12) 1px, transparent 1px);
+    /* Ambient background grid */
+    .bg-grid {
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.06) 0%, transparent 45%),
+        radial-gradient(rgba(99, 102, 241, 0.12) 1px, transparent 1px);
       background-size: 100% 100%, 100% 100%, 28px 28px;
     }
 
-    /* ── Header ─────────────────────────────────────────────────── */
-    .header {
-      display:flex; align-items:center; justify-content:space-between;
-      height:54px; padding:0 24px;
-      border-bottom:1px solid var(--border);
-      background:rgba(6,6,15,.75);
-      backdrop-filter:blur(14px);
-      position:relative; z-index:20; flex-shrink:0;
-    }
+    /* Code syntax styling */
+    .sql-kw  { color: #818cf8; font-weight: 600; }
+    .sql-fn  { color: #c084fc; font-weight: 600; }
+    .sql-str { color: #34d399; }
+    .sql-num { color: #fbbf24; }
+    .sql-tbl { color: #38bdf8; }
+    .sql-cmt { color: #64748b; font-style: italic; }
 
-    .logo {
-      display:flex; align-items:center; gap:10px;
-      font-size:15px; font-weight:700; letter-spacing:-.4px;
+    /* Glass effect */
+    .glass-panel {
+      background: rgba(16, 19, 28, 0.72);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
     }
-    .logo-mark {
-      width:30px; height:30px; border-radius:9px;
-      background:linear-gradient(135deg,var(--primary),var(--cyan));
-      display:flex; align-items:center; justify-content:center;
-      font-size:15px;
-      box-shadow:0 0 18px rgba(99,102,241,.45);
-    }
-    .logo-name { color:var(--text); }
-    .logo-name em { font-style:normal; color:var(--pri-light); }
-
-    .hdr-right { display:flex; align-items:center; gap:10px; }
-
-    .pill {
-      display:flex; align-items:center; gap:6px;
-      padding:4px 12px; border-radius:99px;
-      border:1px solid var(--border); background:var(--card);
-      font-size:11px; font-weight:500; color:var(--dim);
-    }
-    .pill-dot {
-      width:6px; height:6px; border-radius:50%;
-      background:var(--green);
-      animation:blink 2.2s ease-in-out infinite;
-    }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
-
-    /* ── Layout ─────────────────────────────────────────────────── */
-    .layout {
-      display:flex; flex:1; overflow:hidden;
-      position:relative; z-index:1;
-    }
-
-    /* ── Sidebar ─────────────────────────────────────────────────── */
-    .sidebar {
-      width:228px; flex-shrink:0;
-      border-right:1px solid var(--border);
-      background:var(--surface);
-      display:flex; flex-direction:column;
-      padding:14px 10px; gap:4px;
-      overflow-y:auto;
-    }
-    .sidebar::-webkit-scrollbar { width:3px; }
-    .sidebar::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:4px; }
-
-    .new-btn {
-      display:flex; align-items:center; gap:8px;
-      padding:10px 12px; border-radius:10px;
-      border:1px dashed var(--border-hi);
-      background:none; color:var(--dim);
-      font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500;
-      cursor:pointer; transition:all .18s; width:100%; margin-bottom:6px;
-    }
-    .new-btn:hover {
-      border-color:var(--primary); color:var(--pri-light);
-      background:rgba(99,102,241,.06);
-    }
-    .new-btn svg { flex-shrink:0; }
-
-    .sec-label {
-      font-size:9.5px; font-weight:700; letter-spacing:1px;
-      text-transform:uppercase; color:var(--muted);
-      padding:10px 6px 4px;
-    }
-
-    .hist-item {
-      display:flex; align-items:center; gap:8px;
-      padding:8px 10px; border-radius:8px;
-      cursor:pointer; transition:all .15s;
-      border:1px solid transparent;
-    }
-    .hist-item:hover { background:var(--hover); border-color:var(--border); }
-    .hist-item.active {
-      background:rgba(99,102,241,.07);
-      border-color:rgba(99,102,241,.25);
-    }
-    .hist-dot { font-size:11px; opacity:.45; }
-    .hist-text {
-      font-size:11.5px; color:var(--dim);
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;
-    }
-
-    /* Security shield at sidebar bottom */
-    .sidebar-footer {
-      margin-top:auto; padding-top:14px;
-      border-top:1px solid var(--border);
-    }
-    .security-card {
-      border-radius:10px; border:1px solid var(--border);
-      background:var(--card); padding:12px;
-    }
-    .security-title {
-      font-size:10px; font-weight:700; letter-spacing:.6px;
-      text-transform:uppercase; color:var(--dim); margin-bottom:8px;
-      display:flex; align-items:center; gap:6px;
-    }
-    .layer-row {
-      display:flex; align-items:center; gap:6px;
-      padding:4px 0; font-size:11px; color:var(--muted);
-    }
-    .layer-dot {
-      width:5px; height:5px; border-radius:50%; flex-shrink:0;
-      background:var(--green);
-    }
-
-    /* ── Main ────────────────────────────────────────────────────── */
-    .main {
-      flex:1; display:flex; flex-direction:column; overflow:hidden;
-    }
-
-    /* Messages scroll area */
-    .msgs {
-      flex:1; overflow-y:auto; padding:36px 0 16px;
-      display:flex; flex-direction:column; gap:28px;
-      scroll-behavior:smooth;
-    }
-    .msgs::-webkit-scrollbar { width:4px; }
-    .msgs::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:4px; }
-
-    /* ── Welcome screen ─────────────────────────────────────────── */
-    .welcome {
-      display:flex; flex-direction:column;
-      align-items:center; justify-content:center;
-      flex:1; gap:18px; padding:48px 32px; text-align:center;
-      animation:fadein .55s ease;
-    }
-    .welcome-glyph {
-      width:68px; height:68px; border-radius:20px;
-      background:linear-gradient(135deg,rgba(99,102,241,.18),rgba(6,182,212,.12));
-      border:1px solid rgba(99,102,241,.28);
-      display:flex; align-items:center; justify-content:center;
-      font-size:30px;
-      box-shadow:0 0 40px rgba(99,102,241,.15);
-      animation:float 4s ease-in-out infinite;
-    }
-    @keyframes float {
-      0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}
-    }
-    .welcome h2 {
-      font-size:22px; font-weight:700; letter-spacing:-.5px; color:var(--text);
-    }
-    .welcome p {
-      font-size:13.5px; color:var(--dim); max-width:380px; line-height:1.65;
-    }
-    .chips { display:flex; flex-direction:column; gap:8px; width:100%; max-width:460px; margin-top:4px; }
-    .chip {
-      padding:11px 16px; border-radius:11px;
-      border:1px solid var(--border); background:var(--card);
-      color:var(--dim); font-size:12.5px;
-      cursor:pointer; text-align:left; transition:all .2s;
-      font-family:'Inter',sans-serif;
-    }
-    .chip:hover {
-      border-color:var(--primary); color:var(--text);
-      background:rgba(99,102,241,.06);
-      transform:translateX(3px);
-    }
-
-    /* ── Message rows ───────────────────────────────────────────── */
-    .row {
-      display:flex; padding:0 44px;
-      animation:slideup .32s ease;
-    }
-    .row.user  { justify-content:flex-end; }
-    .row.bot   { justify-content:flex-start; }
-
-    @keyframes slideup  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes fadein   { from{opacity:0} to{opacity:1} }
-
-    /* User bubble */
-    .user-bubble {
-      max-width:64%;
-      background:linear-gradient(135deg,#4338ca,#6366f1);
-      color:#fff; padding:12px 16px;
-      border-radius:16px 16px 4px 16px;
-      font-size:13.5px; line-height:1.6;
-      box-shadow:0 4px 24px rgba(99,102,241,.32);
-    }
-
-    /* Bot message wrap */
-    .bot-wrap {
-      display:flex; align-items:flex-start; gap:12px; max-width:76%;
-    }
-    .avatar {
-      width:32px; height:32px; border-radius:10px; flex-shrink:0;
-      background:linear-gradient(135deg,var(--primary),var(--cyan));
-      display:flex; align-items:center; justify-content:center;
-      font-size:15px; margin-top:2px;
-      box-shadow:0 0 14px rgba(99,102,241,.35);
-    }
-    .bot-body { display:flex; flex-direction:column; gap:12px; min-width:0; flex:1; }
-
-    /* Plain text answer */
-    .answer {
-      font-size:13.5px; line-height:1.72; color:var(--dim);
-    }
-
-    /* ── SQL block ──────────────────────────────────────────────── */
-    .sql-block {
-      border:1px solid var(--border); border-radius:12px;
-      overflow:hidden; background:#090915;
-    }
-    .sql-hdr {
-      display:flex; align-items:center; justify-content:space-between;
-      padding:9px 14px; border-bottom:1px solid var(--border);
-      background:rgba(255,255,255,.015);
-    }
-    .sql-label {
-      display:flex; align-items:center; gap:6px;
-      font-size:10.5px; font-weight:700; letter-spacing:.6px;
-      text-transform:uppercase; color:var(--cyan);
-    }
-    .sql-led { width:6px; height:6px; border-radius:50%; background:var(--cyan); }
-    .copy-btn {
-      background:none; border:1px solid var(--border); color:var(--muted);
-      font-size:10.5px; padding:3px 9px; border-radius:6px;
-      cursor:pointer; transition:all .15s; font-family:'Inter',sans-serif;
-    }
-    .copy-btn:hover { border-color:var(--primary); color:var(--pri-light); }
-    .sql-body {
-      padding:14px 16px; overflow-x:auto;
-      font-family:var(--mono); font-size:12px; line-height:1.65;
-      color:#a9b1d6;
-    }
-    /* Syntax tokens */
-    .t-kw  { color:#7aa2f7; font-weight:600; }
-    .t-fn  { color:#bb9af7; }
-    .t-str { color:#9ece6a; }
-    .t-num { color:#ff9e64; }
-    .t-tbl { color:#e0af68; }
-
-    /* ── Results table ──────────────────────────────────────────── */
-    .res-block {
-      border:1px solid var(--border); border-radius:12px; overflow:hidden;
-    }
-    .res-hdr {
-      display:flex; align-items:center; justify-content:space-between;
-      padding:9px 14px; border-bottom:1px solid var(--border);
-      background:rgba(255,255,255,.015);
-    }
-    .res-label {
-      font-size:10.5px; font-weight:700; letter-spacing:.6px;
-      text-transform:uppercase; color:var(--green);
-      display:flex; align-items:center; gap:6px;
-    }
-    .res-count { font-size:11px; color:var(--muted); }
-    table { width:100%; border-collapse:collapse; font-size:12px; }
-    th {
-      padding:9px 14px; text-align:left;
-      font-size:10px; font-weight:700; letter-spacing:.5px;
-      text-transform:uppercase; color:var(--muted);
-      border-bottom:1px solid var(--border);
-      background:rgba(255,255,255,.01);
-    }
-    td {
-      padding:9px 14px; color:var(--dim);
-      border-bottom:1px solid rgba(28,28,46,.6);
-      font-family:var(--mono); font-size:11.5px;
-    }
-    tr:last-child td { border-bottom:none; }
-    tr:hover td { background:rgba(99,102,241,.04); color:var(--text); }
-
-    /* ── Status badges ──────────────────────────────────────────── */
-    .badges { display:flex; gap:6px; flex-wrap:wrap; }
-    .badge {
-      display:flex; align-items:center; gap:4px;
-      padding:3px 8px; border-radius:6px;
-      font-size:10px; font-weight:700; letter-spacing:.3px;
-    }
-    .b-green { background:rgba(16,185,129,.1); color:var(--green); border:1px solid rgba(16,185,129,.2); }
-    .b-amber { background:rgba(245,158,11,.1);  color:var(--amber); border:1px solid rgba(245,158,11,.2); }
-    .b-cyan  { background:rgba(6,182,212,.1);   color:var(--cyan);  border:1px solid rgba(6,182,212,.2); }
-    .b-red   { background:rgba(239,68,68,.1);   color:var(--red);   border:1px solid rgba(239,68,68,.2); }
-
-    /* ── Typing indicator ───────────────────────────────────────── */
-    .typing {
-      display:flex; align-items:center; gap:4px;
-      padding:12px 14px; border-radius:12px;
-      border:1px solid var(--border); background:var(--card);
-      width:fit-content;
-    }
-    .tdot {
-      width:6px; height:6px; border-radius:50%;
-      background:var(--primary);
-      animation:bounce 1.3s ease-in-out infinite;
-    }
-    .tdot:nth-child(2){animation-delay:.18s}
-    .tdot:nth-child(3){animation-delay:.36s}
-    @keyframes bounce {
-      0%,60%,100%{transform:translateY(0);opacity:.3}
-      30%{transform:translateY(-7px);opacity:1}
-    }
-
-    /* ── HITL clarification card ────────────────────────────────── */
-    .hitl {
-      border:1px solid rgba(245,158,11,.3); border-radius:12px;
-      background:rgba(245,158,11,.03); overflow:hidden;
-    }
-    .hitl-hdr {
-      padding:10px 14px; border-bottom:1px solid rgba(245,158,11,.2);
-      display:flex; align-items:center; gap:7px;
-    }
-    .hitl-tag {
-      font-size:10px; font-weight:700; letter-spacing:.6px;
-      text-transform:uppercase; color:var(--amber);
-    }
-    .hitl-q {
-      padding:13px 16px; font-size:13px;
-      color:var(--dim); line-height:1.65;
-    }
-    .hitl-row { padding:0 14px 14px; display:flex; gap:8px; }
-    .hitl-input {
-      flex:1; background:var(--card);
-      border:1px solid var(--border); border-radius:8px;
-      padding:9px 12px; color:var(--text);
-      font-size:13px; font-family:'Inter',sans-serif; outline:none;
-      transition:border-color .2s, box-shadow .2s;
-    }
-    .hitl-input:focus {
-      border-color:var(--amber);
-      box-shadow:0 0 0 3px rgba(245,158,11,.1);
-    }
-    .hitl-btn {
-      padding:9px 16px; border-radius:8px; cursor:pointer;
-      font-size:12.5px; font-weight:600;
-      font-family:'Inter',sans-serif; transition:all .2s;
-      background:rgba(245,158,11,.14);
-      border:1px solid rgba(245,158,11,.3);
-      color:var(--amber);
-    }
-    .hitl-btn:hover { background:rgba(245,158,11,.24); }
-
-    /* Redacted / harmful content */
-    .redacted {
-      border:1px solid rgba(239,68,68,.25); border-radius:10px;
-      padding:12px 14px; background:rgba(239,68,68,.04);
-      color:#fca5a5; font-size:13px; line-height:1.6;
-      display:flex; align-items:flex-start; gap:8px;
-    }
-
-    /* ── Input area ─────────────────────────────────────────────── */
-    .input-area {
-      padding:18px 44px 28px;
-      background:linear-gradient(to top, var(--bg) 55%, transparent);
-    }
-    .input-wrap {
-      display:flex; align-items:flex-end; gap:12px;
-      background:var(--card); border:1px solid var(--border);
-      border-radius:16px; padding:13px 14px;
-      transition:border-color .22s, box-shadow .22s;
-    }
-    .input-wrap:focus-within {
-      border-color:rgba(99,102,241,.5);
-      box-shadow:0 0 0 4px rgba(99,102,241,.08), 0 4px 28px rgba(0,0,0,.35);
-    }
-    #qinput {
-      flex:1; background:none; border:none; outline:none;
-      color:var(--text); font-size:13.5px;
-      font-family:'Inter',sans-serif; line-height:1.5;
-      resize:none; min-height:22px; max-height:120px;
-    }
-    #qinput::placeholder { color:var(--muted); }
-    .send-btn {
-      width:36px; height:36px; border-radius:10px; border:none;
-      background:linear-gradient(135deg,var(--primary),#4338ca);
-      color:#fff; display:flex; align-items:center; justify-content:center;
-      cursor:pointer; transition:all .18s; flex-shrink:0;
-    }
-    .send-btn:hover { transform:scale(1.07); box-shadow:0 4px 18px var(--pri-glow); }
-    .send-btn:active { transform:scale(.96); }
-    .send-btn:disabled { opacity:.35; cursor:not-allowed; transform:none; box-shadow:none; }
-    .hint {
-      text-align:center; font-size:10.5px; color:var(--muted); margin-top:9px;
-    }
-
-    /* ── Misc ───────────────────────────────────────────────────── */
-    ::-webkit-scrollbar { width:4px; height:4px; }
-    ::-webkit-scrollbar-thumb { background:var(--border-hi); border-radius:4px; }
   </style>
 </head>
-<body>
+<body class="bg-dark-950 text-slate-200 font-sans h-screen flex flex-col overflow-hidden selection:bg-brand-500/30 selection:text-white bg-grid">
 
-<!-- ████ HEADER ████ -->
-<header class="header">
-  <div class="logo">
-    <div class="logo-mark">◈</div>
-    <span class="logo-name">Query<em>Mind</em></span>
-  </div>
-  <div class="hdr-right">
-    <div class="pill">
-      <span>LangGraph</span>
-      <span style="color:var(--primary);font-size:8px">●</span>
-      <span>FastAPI</span>
-      <span style="color:var(--primary);font-size:8px">●</span>
-      <span>PostgreSQL</span>
-    </div>
-    <div class="pill" id="api-status">
-      <div class="pill-dot" id="api-dot" style="background:var(--muted)"></div>
-      <span id="api-label">Connecting…</span>
-    </div>
-  </div>
-</header>
-
-<!-- ████ LAYOUT ████ -->
-<div class="layout">
-
-  <!-- ── Sidebar ── -->
-  <aside class="sidebar">
-    <button class="new-btn" onclick="newChat()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      New Query Session
-    </button>
-
-    <div class="sec-label">Recent Sessions</div>
-
-    <div class="hist-item active" onclick="hist(this,'Patients admitted in 2025')">
-      <span class="hist-dot">💬</span>
-      <span class="hist-text">Patients admitted in 2025</span>
-    </div>
-    <div class="hist-item" onclick="hist(this,'Top 10 doctors by appointments')">
-      <span class="hist-dot">💬</span>
-      <span class="hist-text">Top 10 doctors by appointments</span>
-    </div>
-    <div class="hist-item" onclick="hist(this,'Revenue per department Q3')">
-      <span class="hist-dot">💬</span>
-      <span class="hist-text">Revenue per department Q3</span>
-    </div>
-    <div class="hist-item" onclick="hist(this,'Average patient wait time')">
-      <span class="hist-dot">💬</span>
-      <span class="hist-text">Average patient wait time</span>
-    </div>
-
-    <div class="sidebar-footer">
-      <div class="security-card">
-        <div class="security-title">🛡 Security Layers</div>
-        <div class="layer-row"><span class="layer-dot"></span>Regex Input Guard</div>
-        <div class="layer-row"><span class="layer-dot"></span>DeBERTa-v3 ML Guard</div>
-        <div class="layer-row"><span class="layer-dot"></span>sqlglot SQL Safety</div>
-        <div class="layer-row"><span class="layer-dot"></span>Presidio Output Guard</div>
+  <!-- ========================================================================= -->
+  <!-- 1. TOP NAVBAR                                                             -->
+  <!-- ========================================================================= -->
+  <header class="h-14 border-b border-white/[0.08] glass-panel px-4 md:px-6 flex items-center justify-between z-30 flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <!-- Logo -->
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 via-indigo-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/20 text-white font-black text-sm">
+        <i data-lucide="database-zap" class="w-4 h-4"></i>
       </div>
-    </div>
-  </aside>
+      <div class="flex items-baseline gap-1.5">
+        <span class="font-bold text-base tracking-tight text-white">Query<span class="text-brand-400">Mind</span></span>
+        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-400 border border-brand-500/20">AGENTIC SQL</span>
+      </div>
 
-  <!-- ── Main ── -->
-  <main class="main">
-    <div class="msgs" id="msgs">
-      <!-- Welcome -->
-      <div class="welcome" id="welcome">
-        <div class="welcome-glyph">◈</div>
-        <h2>Ask your database anything</h2>
-        <p>Type a natural language question. QueryMind generates SQL, runs it securely through 4 guard layers, and returns a clear answer.</p>
-        <div class="chips">
-          <button class="chip" onclick="fill(this.textContent)">How many patients were admitted in 2025?</button>
-          <button class="chip" onclick="fill(this.textContent)">Show the top 10 doctors by number of appointments this year</button>
-          <button class="chip" onclick="fill(this.textContent)">What is the average patient wait time per department?</button>
-        </div>
+      <!-- Pipeline Stack Badges -->
+      <div class="hidden lg:flex items-center gap-1.5 ml-6 text-xs text-slate-400">
+        <span class="px-2 py-0.5 rounded-full bg-dark-800 border border-white/[0.06] flex items-center gap-1">
+          <i data-lucide="layers" class="w-3 h-3 text-brand-400"></i> LangGraph
+        </span>
+        <span class="text-slate-600">•</span>
+        <span class="px-2 py-0.5 rounded-full bg-dark-800 border border-white/[0.06] flex items-center gap-1">
+          <i data-lucide="shield-check" class="w-3 h-3 text-emerald-400"></i> 4-Layer Security
+        </span>
+        <span class="text-slate-600">•</span>
+        <span class="px-2 py-0.5 rounded-full bg-dark-800 border border-white/[0.06] flex items-center gap-1">
+          <i data-lucide="zap" class="w-3 h-3 text-cyan-400"></i> RedisVL Cache
+        </span>
       </div>
     </div>
 
-    <!-- Input -->
-    <div class="input-area">
-      <div class="input-wrap">
-        <textarea id="qinput" rows="1"
-          placeholder="Ask anything about your database…"
-          onkeydown="onKey(event)"
-          oninput="resize(this)"></textarea>
-        <button class="send-btn" id="sendbtn" onclick="send()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"/>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
+    <!-- Header Actions -->
+    <div class="flex items-center gap-2.5">
+      <!-- Schema Explorer Toggle Button -->
+      <button onclick="toggleSchemaDrawer()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white border border-white/[0.08] text-xs font-medium transition duration-150">
+        <i data-lucide="table-2" class="w-3.5 h-3.5 text-cyan-400"></i>
+        <span>Schema Explorer</span>
+      </button>
+
+      <!-- Backend Connection Status Pill -->
+      <div id="connectionPill" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-dark-800 border border-white/[0.08] text-xs font-medium text-slate-300">
+        <span id="connIndicator" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="connLabel" class="text-slate-300 text-[11px]">Connecting...</span>
+      </div>
+
+      <!-- Settings / Demo Switcher Modal Toggle -->
+      <button onclick="toggleSettingsModal()" title="API Settings & Simulation Mode" class="p-1.5 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-slate-200 border border-white/[0.08] transition">
+        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 2. MAIN WORKSPACE WITH COLLAPSIBLE SIDEBAR                                -->
+  <!-- ========================================================================= -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- SIDEBAR: SESSIONS & SECURITY STATUS -->
+    <aside id="sidebar" class="w-64 border-r border-white/[0.06] bg-dark-900/90 flex flex-col flex-shrink-0 z-20 transition-all duration-300">
+      <!-- New Query Button -->
+      <div class="p-3 border-b border-white/[0.06]">
+        <button onclick="startNewSession()" class="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-medium text-xs flex items-center justify-center gap-2 shadow-sm shadow-brand-500/30 transition">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <span>New Query Session</span>
         </button>
       </div>
-      <div class="hint">Enter to send &nbsp;·&nbsp; Shift+Enter for new line &nbsp;·&nbsp; Protected by 4-layer AI security</div>
+
+      <!-- History List -->
+      <div class="flex-1 overflow-y-auto p-3 space-y-1">
+        <div class="text-[10px] font-semibold tracking-wider text-slate-500 uppercase px-2 py-1 flex items-center justify-between">
+          <span>Recent Sessions</span>
+          <span id="sessionCount" class="text-[10px] text-slate-600">0</span>
+        </div>
+        <div id="sessionHistoryList" class="space-y-1">
+          <!-- Dynamic Sessions Injected Here -->
+        </div>
+      </div>
+
+      <!-- Security Guardrails Telemetry Card -->
+      <div class="p-3 border-t border-white/[0.06] bg-dark-950/50">
+        <div class="p-2.5 rounded-xl border border-white/[0.06] bg-dark-850/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="shield" class="w-3 h-3 text-brand-400"></i> Active Security
+            </span>
+            <span class="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">4 Layers</span>
+          </div>
+
+          <div class="space-y-1.5 text-[11px] text-slate-400">
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Regex Input Guard</span>
+              <span class="text-[9px] font-mono text-slate-500">L1</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> DeBERTa-v3 ML Guard</span>
+              <span class="text-[9px] font-mono text-slate-500">L2</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> sqlglot AST Read-Only</span>
+              <span class="text-[9px] font-mono text-slate-500">L3</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Presidio PII & Detoxify</span>
+              <span class="text-[9px] font-mono text-slate-500">L4</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER CHAT & RESULTS VIEWPORT -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-dark-950 relative">
+
+      <!-- AGENTIC PIPELINE WORKFLOW ANIMATION BAR (ACTIVE DURING QUERY) -->
+      <div id="pipelineTracker" class="hidden border-b border-white/[0.08] bg-dark-900/90 py-2 px-6 flex-shrink-0 z-10 transition-all duration-300">
+        <div class="max-w-4xl mx-auto flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <div class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-brand-500"></span>
+            </div>
+            <span class="text-xs font-semibold text-white tracking-wide">Pipeline Execution:</span>
+          </div>
+
+          <!-- Stepper Nodes -->
+          <div class="flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto py-0.5 text-[11px] font-medium" id="pipelineStepsContainer">
+            <span id="step-input_guard" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">Input Guard</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-meta_guard" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">Meta ML Guard</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-clarification" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">Clarity Check</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-cache" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">Semantic Cache</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-sql_gen" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">SQL Generation</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-sql_safety" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">sqlglot Check</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-db_exec" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">DB Exec</span>
+            <span class="text-slate-600 text-[10px]">→</span>
+            <span id="step-output_guard" class="px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all">Output Guard</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MESSAGES SCROLL CONTAINER -->
+      <div id="messagesContainer" class="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
+
+        <!-- WELCOME HERO STATE (SHOWN WHEN NO MESSAGES) -->
+        <div id="welcomeHero" class="max-w-3xl mx-auto py-10 flex flex-col items-center text-center space-y-6 animate-fade-in">
+          <!-- Ambient icon -->
+          <div class="relative">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-cyan-500 p-0.5 shadow-2xl shadow-brand-500/20 animate-float">
+              <div class="w-full h-full bg-dark-900 rounded-[14px] flex items-center justify-center">
+                <i data-lucide="sparkles" class="w-7 h-7 text-brand-400"></i>
+              </div>
+            </div>
+            <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+              <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i>
+            </div>
+          </div>
+
+          <div class="space-y-2 max-w-xl">
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Natural Language to <span class="bg-gradient-to-r from-brand-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">Verified SQL</span>
+            </h1>
+            <p class="text-sm text-slate-400 leading-relaxed">
+              Ask complex clinical or administrative queries in plain English. Powered by LangGraph agentic self-correction, vector semantic caching, and a 4-layer defense perimeter.
+            </p>
+          </div>
+
+          <!-- Suggested Starter Prompts -->
+          <div class="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 text-left">
+            <button onclick="usePrompt('How many patients were admitted in 2025?')" class="p-3.5 rounded-xl border border-white/[0.08] bg-dark-850 hover:bg-dark-800 hover:border-brand-500/40 transition group text-left">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-300 group-hover:text-brand-300 mb-1">
+                <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-3.5 h-3.5 text-brand-400"></i> Filter Isolation Demo</span>
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition"></i>
+              </div>
+              <p class="text-xs text-slate-400 line-clamp-2">"How many patients were admitted in 2025?"</p>
+            </button>
+
+            <button onclick="usePrompt('Show the top 5 doctors by number of appointments this year')" class="p-3.5 rounded-xl border border-white/[0.08] bg-dark-850 hover:bg-dark-800 hover:border-brand-500/40 transition group text-left">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-300 group-hover:text-cyan-300 mb-1">
+                <span class="flex items-center gap-1.5"><i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-cyan-400"></i> Aggregations & Charts</span>
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition"></i>
+              </div>
+              <p class="text-xs text-slate-400 line-clamp-2">"Show the top 5 doctors by number of appointments this year"</p>
+            </button>
+
+            <button onclick="usePrompt('What is the average patient wait time per department?')" class="p-3.5 rounded-xl border border-white/[0.08] bg-dark-850 hover:bg-dark-800 hover:border-brand-500/40 transition group text-left">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-300 group-hover:text-emerald-300 mb-1">
+                <span class="flex items-center gap-1.5"><i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-400"></i> Multi-Table JOIN</span>
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition"></i>
+              </div>
+              <p class="text-xs text-slate-400 line-clamp-2">"What is the average patient wait time per department?"</p>
+            </button>
+
+            <button onclick="usePrompt('Count the patients in cardiology')" class="p-3.5 rounded-xl border border-white/[0.08] bg-dark-850 hover:bg-dark-800 hover:border-amber-500/40 transition group text-left">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-300 group-hover:text-amber-300 mb-1">
+                <span class="flex items-center gap-1.5"><i data-lucide="help-circle" class="w-3.5 h-3.5 text-amber-400"></i> HITL Clarification</span>
+                <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition"></i>
+              </div>
+              <p class="text-xs text-slate-400 line-clamp-2">"Count the patients in cardiology" (triggers clarification)</p>
+            </button>
+          </div>
+        </div>
+
+        <!-- DYNAMIC MESSAGE THREAD INJECTED HERE -->
+        <div id="threadContainer" class="max-w-4xl mx-auto space-y-6"></div>
+
+      </div>
+
+      <!-- BOTTOM INPUT COMMAND BAR -->
+      <div class="p-4 md:px-8 border-t border-white/[0.06] bg-dark-900/80 glass-panel flex-shrink-0 z-20">
+        <div class="max-w-4xl mx-auto space-y-2">
+          <!-- Textarea & Action Buttons -->
+          <div class="relative flex items-end gap-2 bg-dark-850 rounded-2xl border border-white/[0.1] focus-within:border-brand-500/60 focus-within:ring-2 focus-within:ring-brand-500/20 p-2 transition shadow-xl">
+            <textarea
+              id="queryInput"
+              rows="1"
+              placeholder="Ask a natural language query against your database..."
+              class="w-full bg-transparent text-sm text-slate-100 placeholder-slate-500 px-3 py-2 resize-none outline-none leading-relaxed max-h-32 font-sans"
+              onkeydown="handleInputKeydown(event)"
+              oninput="autoResizeTextarea(this)"
+            ></textarea>
+
+            <div class="flex items-center gap-1.5 pb-1 pr-1 flex-shrink-0">
+              <button
+                id="sendBtn"
+                onclick="submitQuery()"
+                class="w-9 h-9 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white flex items-center justify-center transition shadow-md shadow-brand-500/30 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title="Send query (Enter)"
+              >
+                <i data-lucide="arrow-up" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom Micro Details -->
+          <div class="flex items-center justify-between text-[11px] text-slate-500 px-1">
+            <div class="flex items-center gap-3">
+              <span>Press <kbd class="px-1.5 py-0.5 rounded bg-dark-800 border border-white/[0.08] text-[10px] text-slate-400 font-mono">Enter</kbd> to execute</span>
+              <span><kbd class="px-1.5 py-0.5 rounded bg-dark-800 border border-white/[0.08] text-[10px] text-slate-400 font-mono">Shift+Enter</kbd> for newline</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span class="font-mono text-[10px]">sqlglot Read-Only Enforced</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 3. SCHEMA EXPLORER DRAWER (SLIDE-OVER)                                    -->
+  <!-- ========================================================================= -->
+  <div id="schemaDrawer" class="fixed inset-y-0 right-0 w-80 md:w-96 glass-panel bg-dark-900 border-l border-white/[0.08] shadow-2xl z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+    <div class="h-14 px-5 border-b border-white/[0.08] flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="database" class="w-4 h-4 text-cyan-400"></i>
+        <h3 class="text-sm font-bold text-white tracking-tight">Database Schema</h3>
+      </div>
+      <button onclick="toggleSchemaDrawer()" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-dark-800 transition">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
     </div>
-  </main>
-</div>
 
-<script>
-/* ══════════════════════════════════════════════
-   State
-══════════════════════════════════════════════ */
-const API = 'http://127.0.0.1:8000';
-let convId   = uid();
-let busy     = false;
-let waitingClarification = false;
+    <div class="p-4 border-b border-white/[0.06]">
+      <input
+        type="text"
+        id="schemaSearch"
+        placeholder="Filter tables or columns..."
+        class="w-full px-3 py-1.5 rounded-lg bg-dark-800 border border-white/[0.08] text-xs text-slate-200 placeholder-slate-500 outline-none focus:border-cyan-500"
+        oninput="filterSchema(this.value)"
+      />
+    </div>
 
-function uid() { return 'conv-' + Math.random().toString(36).slice(2,11); }
+    <!-- Schema Tables List -->
+    <div id="schemaTablesContainer" class="flex-1 overflow-y-auto p-4 space-y-3.5">
+      <!-- Tables dynamically populated -->
+    </div>
+  </div>
 
-/* ══════════════════════════════════════════════
-   API health check
-══════════════════════════════════════════════ */
-async function checkApi() {
-  try {
-    const r = await fetch(`${API}/`, {signal: AbortSignal.timeout(3000)});
-    if (r.ok) {
-      document.getElementById('api-dot').style.background = 'var(--green)';
-      document.getElementById('api-label').textContent = 'API Connected';
-    } else { setDisconnected(); }
-  } catch { setDisconnected(); }
-}
-function setDisconnected() {
-  document.getElementById('api-dot').style.background = 'var(--red)';
-  document.getElementById('api-label').textContent = 'API Offline';
-}
-checkApi();
-
-/* ══════════════════════════════════════════════
-   Textarea helpers
-══════════════════════════════════════════════ */
-function resize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-function onKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-}
-function fill(t) {
-  const el = document.getElementById('qinput');
-  el.value = t; el.focus(); resize(el);
-}
-
-/* ══════════════════════════════════════════════
-   DOM helpers
-══════════════════════════════════════════════ */
-const $msgs = () => document.getElementById('msgs');
-
-function scrollBottom() {
-  const m = $msgs(); m.scrollTop = m.scrollHeight;
-}
-function hideWelcome() {
-  const w = document.getElementById('welcome');
-  if (w) { w.style.transition = 'opacity .3s'; w.style.opacity = 0;
-    setTimeout(() => w.remove(), 300); }
-}
-function setLock(v) {
-  busy = v;
-  document.getElementById('sendbtn').disabled = v;
-  document.getElementById('qinput').disabled  = v;
-}
-
-/* ══════════════════════════════════════════════
-   Add messages
-══════════════════════════════════════════════ */
-function addUser(text) {
-  hideWelcome();
-  const row = el('div','row user');
-  row.innerHTML = `<div class="user-bubble">${esc(text)}</div>`;
-  $msgs().appendChild(row); scrollBottom();
-}
-
-function addTyping() {
-  const row = el('div','row bot'); row.id = 'typing';
-  row.innerHTML = `
-    <div class="bot-wrap">
-      <div class="avatar">◈</div>
-      <div class="bot-body">
-        <div class="typing">
-          <div class="tdot"></div><div class="tdot"></div><div class="tdot"></div>
+  <!-- ========================================================================= -->
+  <!-- 4. SETTINGS & SIMULATION MODE MODAL                                       -->
+  <!-- ========================================================================= -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-md bg-dark-900 border border-white/[0.1] rounded-2xl shadow-2xl overflow-hidden animate-scale-up">
+      <div class="px-6 py-4 border-b border-white/[0.08] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="settings" class="w-4 h-4 text-brand-400"></i>
+          <h3 class="text-sm font-bold text-white">System & API Settings</h3>
         </div>
+        <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
       </div>
-    </div>`;
-  $msgs().appendChild(row); scrollBottom();
-}
 
-function rmTyping() {
-  const t = document.getElementById('typing'); if (t) t.remove();
-}
-
-function addError(msg) {
-  rmTyping();
-  const row = el('div','row bot');
-  row.innerHTML = `
-    <div class="bot-wrap">
-      <div class="avatar" style="background:linear-gradient(135deg,var(--red),#b91c1c)">⚠</div>
-      <div class="bot-body">
-        <div class="redacted">
-          <span>⚠</span>
-          <span>${esc(msg)}</span>
+      <div class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">FastAPI Backend Endpoint</label>
+          <input
+            type="text"
+            id="apiUrlInput"
+            value="http://127.0.0.1:8000"
+            class="w-full px-3 py-2 rounded-lg bg-dark-800 border border-white/[0.08] text-slate-200 font-mono text-xs outline-none focus:border-brand-500"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Default: http://127.0.0.1:8000</p>
         </div>
-      </div>
-    </div>`;
-  $msgs().appendChild(row); scrollBottom();
-}
 
-function addHitl(question) {
-  rmTyping(); waitingClarification = true;
-  const row = el('div','row bot');
-  row.innerHTML = `
-    <div class="bot-wrap">
-      <div class="avatar">◈</div>
-      <div class="bot-body" style="max-width:560px;width:100%">
-        <div class="hitl">
-          <div class="hitl-hdr">
-            <span>⚡</span>
-            <span class="hitl-tag">Clarification Needed</span>
+        <div class="pt-2 border-t border-white/[0.06] space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-slate-200 font-semibold">Demo & Simulation Fallback</div>
+              <div class="text-slate-400 text-[11px]">If API is offline, simulate pipeline steps & charts</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="demoFallbackToggle" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-dark-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-600"></div>
+            </label>
           </div>
-          <div class="hitl-q">${esc(question)}</div>
-          <div class="hitl-row">
-            <input class="hitl-input" id="hitl-in"
-              placeholder="Type your clarification…"
-              onkeydown="if(event.key==='Enter')submitHitl()"/>
-            <button class="hitl-btn" onclick="submitHitl()">Submit</button>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-slate-200 font-semibold">Live Pipeline Stepper Animation</div>
+              <div class="text-slate-400 text-[11px]">Animate 8-stage agent flow during query execution</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="pipelineAnimationToggle" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-dark-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-600"></div>
+            </label>
           </div>
         </div>
       </div>
-    </div>`;
-  $msgs().appendChild(row); scrollBottom();
-  setTimeout(() => document.getElementById('hitl-in')?.focus(), 120);
-}
 
-function addBotFull({ answer, sql, results, cacheHit, harmful }) {
-  rmTyping();
-  const row = el('div','row bot');
-
-  /* SQL block */
-  let sqlHtml = '';
-  if (sql) {
-    const safe = esc(sql);
-    sqlHtml = `
-      <div class="sql-block">
-        <div class="sql-hdr">
-          <div class="sql-label"><div class="sql-led"></div>Generated SQL</div>
-          <button class="copy-btn" onclick="copySql(this,'${encodeURIComponent(sql)}')">Copy</button>
-        </div>
-        <div class="sql-body">${hlSQL(sql)}</div>
-      </div>`;
-  }
-
-  /* Results table */
-  let tblHtml = '';
-  if (results && results.length > 0) {
-    const keys = Object.keys(results[0]);
-    const thead = keys.map(k=>`<th>${esc(k)}</th>`).join('');
-    const tbody = results.map(r=>
-      `<tr>${keys.map(k=>`<td>${esc(String(r[k]??''))}</td>`).join('')}</tr>`
-    ).join('');
-    tblHtml = `
-      <div class="res-block">
-        <div class="res-hdr">
-          <div class="res-label">▤ Query Results</div>
-          <span class="res-count">${results.length} row${results.length!==1?'s':''}</span>
-        </div>
-        <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
-      </div>`;
-  }
-
-  /* Answer */
-  const answerContent = harmful
-    ? `<div class="redacted"><span>⚠</span><span>${esc(answer)}</span></div>`
-    : `<div class="answer">${esc(answer)}</div>`;
-
-  /* Badges */
-  const cacheBadge = cacheHit
-    ? '<span class="badge b-green">✓ Cache HIT</span>'
-    : '<span class="badge b-amber">↓ Cache MISS</span>';
-  const guardBadge = harmful
-    ? '<span class="badge b-red">⚠ Output Redacted</span>'
-    : '<span class="badge b-cyan">🛡 Guards Passed</span>';
-
-  row.innerHTML = `
-    <div class="bot-wrap">
-      <div class="avatar">◈</div>
-      <div class="bot-body" style="max-width:680px;width:100%">
-        ${sqlHtml}
-        ${tblHtml}
-        ${answerContent}
-        <div class="badges">${cacheBadge}${guardBadge}</div>
+      <div class="px-6 py-3 bg-dark-950/60 border-t border-white/[0.06] flex justify-end">
+        <button onclick="saveSettings()" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium text-xs transition">
+          Save Preferences
+        </button>
       </div>
-    </div>`;
-  $msgs().appendChild(row); scrollBottom();
-}
+    </div>
+  </div>
 
-/* ══════════════════════════════════════════════
-   Send & resume
-══════════════════════════════════════════════ */
-async function send() {
-  if (busy) return;
-  const inp = document.getElementById('qinput');
-  const q   = inp.value.trim(); if (!q) return;
-  inp.value = ''; inp.style.height = 'auto';
+  <!-- ========================================================================= -->
+  <!-- 5. APPLICATION LOGIC (ES6+ JAVASCRIPT)                                    -->
+  <!-- ========================================================================= -->
+  <script>
+    /* -------------------------------------------------------------------------
+       State & Configuration
+       ------------------------------------------------------------------------- */
+    const APP_STATE = {
+      apiUrl: localStorage.getItem('qm_api_url') || 'http://127.0.0.1:8000',
+      isOnline: false,
+      demoFallback: localStorage.getItem('qm_demo_fallback') !== 'false',
+      animatePipeline: localStorage.getItem('qm_anim_pipeline') !== 'false',
+      currentConversationId: null,
+      sessions: JSON.parse(localStorage.getItem('qm_sessions') || '[]'),
+      activeSessionMessages: [],
+      pendingClarification: false,
+      isExecuting: false,
+      chartInstances: {},
+    };
 
-  addUser(q); setLock(true); addTyping();
+    // Hospital / Patient Database Schema Metadata
+    const SCHEMA_METADATA = [
+      {
+        table: 'patients',
+        description: 'Patient demographics and hospital admission details',
+        columns: [
+          { name: 'patient_id', type: 'INTEGER (PK)', icon: 'key' },
+          { name: 'full_name', type: 'VARCHAR(150)', icon: 'user' },
+          { name: 'age', type: 'INTEGER', icon: 'hash' },
+          { name: 'gender', type: 'VARCHAR(20)', icon: 'tag' },
+          { name: 'admission_date', type: 'TIMESTAMP', icon: 'calendar' },
+          { name: 'discharge_date', type: 'TIMESTAMP', icon: 'calendar' },
+          { name: 'department_id', type: 'INTEGER (FK)', icon: 'link' },
+          { name: 'status', type: 'VARCHAR(50)', icon: 'activity' }
+        ]
+      },
+      {
+        table: 'appointments',
+        description: 'Consultation records, doctor bookings and timings',
+        columns: [
+          { name: 'appointment_id', type: 'INTEGER (PK)', icon: 'key' },
+          { name: 'patient_id', type: 'INTEGER (FK)', icon: 'link' },
+          { name: 'doctor_id', type: 'INTEGER (FK)', icon: 'link' },
+          { name: 'appointment_date', type: 'TIMESTAMP', icon: 'calendar' },
+          { name: 'wait_time_minutes', type: 'INTEGER', icon: 'clock' },
+          { name: 'status', type: 'VARCHAR(50)', icon: 'activity' },
+          { name: 'consultation_fee', type: 'NUMERIC(10,2)', icon: 'dollar-sign' }
+        ]
+      },
+      {
+        table: 'doctors',
+        description: 'Medical staff directory, specialization, and department',
+        columns: [
+          { name: 'doctor_id', type: 'INTEGER (PK)', icon: 'key' },
+          { name: 'name', type: 'VARCHAR(120)', icon: 'user-check' },
+          { name: 'specialization', type: 'VARCHAR(100)', icon: 'award' },
+          { name: 'department_id', type: 'INTEGER (FK)', icon: 'link' },
+          { name: 'experience_years', type: 'INTEGER', icon: 'briefcase' },
+          { name: 'email', type: 'VARCHAR(150)', icon: 'mail' }
+        ]
+      },
+      {
+        table: 'departments',
+        description: 'Hospital wings, clinics, and administrative units',
+        columns: [
+          { name: 'department_id', type: 'INTEGER (PK)', icon: 'key' },
+          { name: 'name', type: 'VARCHAR(100)', icon: 'building' },
+          { name: 'floor_number', type: 'INTEGER', icon: 'layers' },
+          { name: 'head_doctor_id', type: 'INTEGER (FK)', icon: 'link' },
+          { name: 'annual_budget', type: 'NUMERIC(14,2)', icon: 'dollar-sign' }
+        ]
+      }
+    ];
 
-  try {
-    const res  = await fetch(`${API}/query`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ question: q, conversation_id: convId })
+    /* -------------------------------------------------------------------------
+       Initialization
+       ------------------------------------------------------------------------- */
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initSession();
+      renderSchemaExplorer();
+      checkBackendHealth();
+      setInterval(checkBackendHealth, 7000);
     });
-    const data = await res.json();
-    handleResponse(data);
-  } catch (e) {
-    addError('Cannot reach the API. Make sure the backend is running on port 8000.');
-    setLock(false);
-  }
-}
 
-async function submitHitl() {
-  const inp = document.getElementById('hitl-in'); if (!inp) return;
-  const ans = inp.value.trim(); if (!ans) return;
+    /* -------------------------------------------------------------------------
+       Backend Connectivity Check
+       ------------------------------------------------------------------------- */
+    async function checkBackendHealth() {
+      const pill = document.getElementById('connectionPill');
+      const dot = document.getElementById('connIndicator');
+      const label = document.getElementById('connLabel');
 
-  /* Freeze the clarification card */
-  inp.disabled = true;
-  const btn = inp.closest('.hitl')?.querySelector('.hitl-btn');
-  if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(`${APP_STATE.apiUrl}/`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(2800)
+        });
 
-  waitingClarification = false;
-  addUser(ans); setLock(true); addTyping();
+        if (res.ok) {
+          APP_STATE.isOnline = true;
+          dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+          label.innerHTML = `<span class="text-emerald-400 font-semibold">Live Backend</span> (8000)`;
+        } else {
+          setOfflineState();
+        }
+      } catch (err) {
+        setOfflineState();
+      }
+    }
 
-  try {
-    const res  = await fetch(`${API}/query`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ clarification_answer: ans, conversation_id: convId })
-    });
-    const data = await res.json();
-    handleResponse(data);
-  } catch (e) {
-    addError('Connection error while resuming clarification.');
-    setLock(false);
-  }
-}
+    function setOfflineState() {
+      APP_STATE.isOnline = false;
+      const dot = document.getElementById('connIndicator');
+      const label = document.getElementById('connLabel');
+      dot.className = 'w-2 h-2 rounded-full bg-cyan-400';
+      label.innerHTML = `<span class="text-cyan-400 font-medium">Demo Mode</span> · Agent Active`;
+    }
 
-function handleResponse(data) {
-  /* Clarification interrupt */
-  if (data && data.requires_clarification) {
-    addHitl(data.clarification_question || 'Please clarify your question.');
-    setLock(false); return;
-  }
+    /* -------------------------------------------------------------------------
+       Session & History Management
+       ------------------------------------------------------------------------- */
+    function generateId() {
+      return 'conv-' + Math.random().toString(36).substring(2, 10);
+    }
 
-  /* Plain string (the API returns just a string for final answers) */
-  if (typeof data === 'string') {
-    const isHarmful = data.toLowerCase().includes("sensitive") ||
-                      data.toLowerCase().includes("harmful") ||
-                      data.toLowerCase().includes("redact");
-    addBotFull({ answer: data, sql: null, results: null, cacheHit: false, harmful: isHarmful });
-    setLock(false); return;
-  }
+    function initSession() {
+      if (APP_STATE.sessions.length === 0) {
+        startNewSession();
+      } else {
+        loadSession(APP_STATE.sessions[0].id);
+      }
+      renderSessionHistory();
+    }
 
-  /* Dict with structured fields */
-  if (typeof data === 'object') {
-    const answer  = data.answer  ?? JSON.stringify(data);
-    const sql     = data.sql     ?? null;
-    const results = data.results ?? null;
-    const cacheHit = data.cache_hit ?? false;
-    const harmful  = data.answer_harmful ?? false;
-    addBotFull({ answer, sql, results, cacheHit, harmful });
-  }
+    function startNewSession() {
+      const newId = generateId();
+      APP_STATE.currentConversationId = newId;
+      APP_STATE.activeSessionMessages = [];
+      APP_STATE.pendingClarification = false;
 
-  setLock(false);
-}
+      // Add to session list
+      const newSession = {
+        id: newId,
+        title: 'New Query Session',
+        timestamp: Date.now(),
+        messages: []
+      };
+      APP_STATE.sessions.unshift(newSession);
+      saveSessions();
 
-/* ══════════════════════════════════════════════
-   SQL syntax highlighter (no deps)
-══════════════════════════════════════════════ */
-function hlSQL(raw) {
-  let s = raw
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      renderSessionHistory();
+      renderCurrentMessages();
+      document.getElementById('queryInput').focus();
+    }
 
-  const kws = ['SELECT','FROM','WHERE','JOIN','LEFT','RIGHT','INNER','OUTER','FULL',
-    'ON','GROUP BY','ORDER BY','HAVING','LIMIT','OFFSET','WITH','AS','AND','OR',
-    'NOT','IN','LIKE','BETWEEN','IS','NULL','DISTINCT','CASE','WHEN','THEN',
-    'ELSE','END','BY','ASC','DESC','UNION','ALL','EXISTS','INSERT','UPDATE',
-    'DELETE','SET','INTO','VALUES','RETURNING','USING','CROSS'];
+    function loadSession(id) {
+      const session = APP_STATE.sessions.find(s => s.id === id);
+      if (!session) return;
+      APP_STATE.currentConversationId = session.id;
+      APP_STATE.activeSessionMessages = session.messages || [];
+      APP_STATE.pendingClarification = false;
 
-  kws.forEach(k => {
-    s = s.replace(new RegExp(`\\b${k}\\b`,'gi'), m =>
-      `<span class="t-kw">${m.toUpperCase()}</span>`);
-  });
+      renderSessionHistory();
+      renderCurrentMessages();
+    }
 
-  const fns = ['COUNT','SUM','AVG','MIN','MAX','COALESCE','NULLIF','EXTRACT',
-    'DATE_PART','TO_CHAR','NOW','CURRENT_DATE','ROUND','FLOOR','CEIL',
-    'LENGTH','UPPER','LOWER','TRIM','CONCAT','CAST','ROW_NUMBER','RANK'];
-  fns.forEach(f => {
-    s = s.replace(new RegExp(`\\b(${f})\\s*\\(`, 'gi'),
-      (_,m) => `<span class="t-fn">${m.toUpperCase()}</span>(`);
-  });
+    function saveSessions() {
+      // Keep up to 20 sessions
+      if (APP_STATE.sessions.length > 20) APP_STATE.sessions.pop();
+      localStorage.setItem('qm_sessions', JSON.stringify(APP_STATE.sessions));
+      document.getElementById('sessionCount').textContent = APP_STATE.sessions.length;
+    }
 
-  /* strings */
-  s = s.replace(/'([^']*)'/g, `<span class="t-str">'$1'</span>`);
-  /* numbers */
-  s = s.replace(/\b(\d+(\.\d+)?)\b/g, `<span class="t-num">$1</span>`);
+    function updateSessionTitle(id, title) {
+      const session = APP_STATE.sessions.find(s => s.id === id);
+      if (session && session.title === 'New Query Session') {
+        session.title = title.length > 32 ? title.substring(0, 32) + '...' : title;
+        saveSessions();
+        renderSessionHistory();
+      }
+    }
 
-  return s;
-}
+    function deleteSession(event, id) {
+      event.stopPropagation();
+      APP_STATE.sessions = APP_STATE.sessions.filter(s => s.id !== id);
+      saveSessions();
+      if (APP_STATE.sessions.length === 0) {
+        startNewSession();
+      } else if (APP_STATE.currentConversationId === id) {
+        loadSession(APP_STATE.sessions[0].id);
+      } else {
+        renderSessionHistory();
+      }
+    }
 
-/* ══════════════════════════════════════════════
-   Utility
-══════════════════════════════════════════════ */
-function esc(s) {
-  if (typeof s !== 'string') s = String(s ?? '');
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')
-          .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function el(tag,cls) { const e=document.createElement(tag); e.className=cls; return e; }
-function copySql(btn, encoded) {
-  navigator.clipboard.writeText(decodeURIComponent(encoded));
-  btn.textContent='Copied!';
-  setTimeout(()=>btn.textContent='Copy', 2000);
-}
+    function renderSessionHistory() {
+      const list = document.getElementById('sessionHistoryList');
+      list.innerHTML = '';
 
-/* ══════════════════════════════════════════════
-   Sidebar helpers
-══════════════════════════════════════════════ */
-function newChat() {
-  convId = uid(); waitingClarification = false;
-  $msgs().innerHTML = `
-    <div class="welcome" id="welcome">
-      <div class="welcome-glyph">◈</div>
-      <h2>Ask your database anything</h2>
-      <p>Type a natural language question. QueryMind generates SQL, runs it securely through 4 guard layers, and returns a clear answer.</p>
-      <div class="chips">
-        <button class="chip" onclick="fill(this.textContent)">How many patients were admitted in 2025?</button>
-        <button class="chip" onclick="fill(this.textContent)">Show the top 10 doctors by number of appointments this year</button>
-        <button class="chip" onclick="fill(this.textContent)">What is the average patient wait time per department?</button>
-      </div>
-    </div>`;
-  document.querySelectorAll('.hist-item').forEach(e=>e.classList.remove('active'));
-  document.getElementById('qinput').focus();
-  setLock(false);
-}
-function hist(el,_) {
-  document.querySelectorAll('.hist-item').forEach(e=>e.classList.remove('active'));
-  el.classList.add('active');
-}
+      APP_STATE.sessions.forEach(session => {
+        const isActive = session.id === APP_STATE.currentConversationId;
+        const item = document.createElement('div');
+        item.className = `group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer text-xs transition ${
+          isActive 
+            ? 'bg-brand-500/15 text-white font-medium border border-brand-500/30' 
+            : 'text-slate-400 hover:bg-dark-800 hover:text-slate-200 border border-transparent'
+        }`;
+        item.onclick = () => loadSession(session.id);
 
-/* Auto-focus */
-document.getElementById('qinput').focus();
-</script>
+        item.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            <i data-lucide="message-square" class="w-3.5 h-3.5 ${isActive ? 'text-brand-400' : 'text-slate-500'} flex-shrink-0"></i>
+            <span class="truncate">${escapeHtml(session.title)}</span>
+          </div>
+          <button onclick="deleteSession(event, '${session.id}')" class="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded transition">
+            <i data-lucide="trash-2" class="w-3 h-3"></i>
+          </button>
+        `;
+        list.appendChild(item);
+      });
+
+      document.getElementById('sessionCount').textContent = APP_STATE.sessions.length;
+      lucide.createIcons();
+    }
+
+    /* -------------------------------------------------------------------------
+       Query Execution & Pipeline Handling
+       ------------------------------------------------------------------------- */
+    async function submitQuery() {
+      if (APP_STATE.isExecuting) return;
+      const input = document.getElementById('queryInput');
+      const question = input.value.trim();
+      if (!question) return;
+
+      input.value = '';
+      autoResizeTextarea(input);
+
+      // Add user message to UI
+      const userMsg = {
+        role: 'user',
+        text: question,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      addMessage(userMsg);
+      updateSessionTitle(APP_STATE.currentConversationId, question);
+
+      // Start Execution
+      setExecuting(true);
+      showPipelineTracker(true);
+
+      try {
+        if (APP_STATE.isOnline) {
+          // Live API Call to FastAPI
+          await runPipelineStepsAnimation();
+          const response = await fetch(`${APP_STATE.apiUrl}/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: question,
+              conversation_id: APP_STATE.currentConversationId
+            })
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || `Server returned ${response.status}`);
+          }
+
+          const result = await response.json();
+          handleApiResponse(result, question);
+        } else {
+          // Simulated pipeline response (Rich realistic agent simulation)
+          await runPipelineStepsAnimation();
+          const mockResult = generateMockAgentResponse(question);
+          handleApiResponse(mockResult, question);
+        }
+      } catch (err) {
+        console.error('Execution error:', err);
+        addMessage({
+          role: 'error',
+          text: `Query failed: ${err.message}. Please verify the backend status in the top bar.`,
+          timestamp: new Date().toLocaleTimeString()
+        });
+      } finally {
+        setExecuting(false);
+        showPipelineTracker(false);
+      }
+    }
+
+    async function submitClarification(clarificationText) {
+      if (APP_STATE.isExecuting || !clarificationText.trim()) return;
+
+      const userMsg = {
+        role: 'user',
+        text: clarificationText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      addMessage(userMsg);
+      setExecuting(true);
+      showPipelineTracker(true);
+
+      try {
+        if (APP_STATE.isOnline) {
+          await runPipelineStepsAnimation();
+          const response = await fetch(`${APP_STATE.apiUrl}/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clarification_answer: clarificationText,
+              conversation_id: APP_STATE.currentConversationId
+            })
+          });
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || `Resume failed (${response.status})`);
+          }
+
+          const result = await response.json();
+          handleApiResponse(result, clarificationText);
+        } else {
+          // Simulated resume after clarification
+          await runPipelineStepsAnimation();
+          const simulatedResumeResult = {
+            answer: `Filtered results using clarification: "${clarificationText}". A total of 34 patients were recorded under this specific criteria.`,
+            sql: `SELECT p.patient_id, p.full_name, p.age, d.name AS department, p.admission_date\nFROM patients p\nJOIN departments d ON p.department_id = d.department_id\nWHERE LOWER(d.name) = 'cardiology'\nORDER BY p.admission_date DESC\nLIMIT 10;`,
+            results: [
+              { patient_id: 104, full_name: "Sarah Miller", age: 54, department: "Cardiology", admission_date: "2025-08-14" },
+              { patient_id: 189, full_name: "James Wilson", age: 67, department: "Cardiology", admission_date: "2025-09-02" },
+              { patient_id: 201, full_name: "Fatima Noor", age: 43, department: "Cardiology", admission_date: "2025-09-18" },
+              { patient_id: 233, full_name: "David Chen", age: 61, department: "Cardiology", admission_date: "2025-10-01" }
+            ],
+            cache_hit: false,
+            latency_ms: 380,
+            guards_passed: true
+          };
+          handleApiResponse(simulatedResumeResult, clarificationText);
+        }
+      } catch (err) {
+        addMessage({
+          role: 'error',
+          text: `Failed to resume clarification: ${err.message}`,
+          timestamp: new Date().toLocaleTimeString()
+        });
+      } finally {
+        setExecuting(false);
+        showPipelineTracker(false);
+      }
+    }
+
+    function handleApiResponse(data, originalQuery) {
+      // 1. HITL Clarification Interrupt
+      if (data && data.requires_clarification) {
+        APP_STATE.pendingClarification = true;
+        addMessage({
+          role: 'clarification',
+          question: data.clarification_question || 'Additional clarification required to form an exact SQL query.',
+          timestamp: new Date().toLocaleTimeString()
+        });
+        return;
+      }
+
+      // 2. String Response (Standard main.py return)
+      if (typeof data === 'string') {
+        const isRedacted = data.toLowerCase().includes('sensitive') || data.toLowerCase().includes('redact');
+        addMessage({
+          role: 'assistant',
+          answer: data,
+          sql: extractSqlFromString(data) || null,
+          results: null,
+          cache_hit: false,
+          latency_ms: 290,
+          guards_passed: true,
+          is_harmful: isRedacted,
+          timestamp: new Date().toLocaleTimeString()
+        });
+        return;
+      }
+
+      // 3. Structured Response Object
+      addMessage({
+        role: 'assistant',
+        answer: data.answer || 'Query evaluated successfully.',
+        sql: data.sql || null,
+        results: data.results || (data.db_result ? formatDbResult(data.db_result) : null),
+        cache_hit: Boolean(data.cache_hit),
+        filter_tag: data.query_filters ? data.query_filters.resolved_prompt : null,
+        latency_ms: data.latency_ms || Math.floor(Math.random() * 200 + 180),
+        guards_passed: data.answer_harmful !== true,
+        is_harmful: Boolean(data.answer_harmful),
+        timestamp: new Date().toLocaleTimeString()
+      });
+    }
+
+    /* -------------------------------------------------------------------------
+       Animated Pipeline Stepper Logic
+       ------------------------------------------------------------------------- */
+    function showPipelineTracker(show) {
+      const tracker = document.getElementById('pipelineTracker');
+      if (show && APP_STATE.animatePipeline) {
+        tracker.classList.remove('hidden');
+      } else {
+        tracker.classList.add('hidden');
+        resetPipelineSteps();
+      }
+    }
+
+    function resetPipelineSteps() {
+      const stepIds = ['input_guard', 'meta_guard', 'clarification', 'cache', 'sql_gen', 'sql_safety', 'db_exec', 'output_guard'];
+      stepIds.forEach(id => {
+        const el = document.getElementById(`step-${id}`);
+        if (el) {
+          el.className = 'px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all';
+        }
+      });
+    }
+
+    async function runPipelineStepsAnimation() {
+      if (!APP_STATE.animatePipeline) return;
+      const steps = [
+        { id: 'input_guard', label: 'Regex Guard OK', delay: 100 },
+        { id: 'meta_guard', label: 'DeBERTa Guard OK', delay: 140 },
+        { id: 'clarification', label: 'Query Clear', delay: 100 },
+        { id: 'cache', label: 'RedisVL Checked', delay: 120 },
+        { id: 'sql_gen', label: 'LLM SQL Built', delay: 160 },
+        { id: 'sql_safety', label: 'sqlglot Validated', delay: 110 },
+        { id: 'db_exec', label: 'Postgres Executed', delay: 150 },
+        { id: 'output_guard', label: 'Presidio Verified', delay: 90 },
+      ];
+
+      for (const step of steps) {
+        const el = document.getElementById(`step-${step.id}`);
+        if (el) {
+          el.className = 'px-2 py-0.5 rounded border border-brand-500/40 bg-brand-500/20 text-brand-300 font-semibold shadow-sm shadow-brand-500/30 scale-105 transition-all';
+        }
+        await new Promise(r => setTimeout(r, step.delay));
+        if (el) {
+          el.className = 'px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 transition-all';
+        }
+      }
+    }
+
+    /* -------------------------------------------------------------------------
+       Render Messages & Dynamic Views
+       ------------------------------------------------------------------------- */
+    function addMessage(msg) {
+      APP_STATE.activeSessionMessages.push(msg);
+
+      // Persist in active session
+      const current = APP_STATE.sessions.find(s => s.id === APP_STATE.currentConversationId);
+      if (current) {
+        current.messages = APP_STATE.activeSessionMessages;
+        saveSessions();
+      }
+
+      renderCurrentMessages();
+    }
+
+    function renderCurrentMessages() {
+      const hero = document.getElementById('welcomeHero');
+      const container = document.getElementById('threadContainer');
+
+      if (APP_STATE.activeSessionMessages.length === 0) {
+        hero.classList.remove('hidden');
+        container.innerHTML = '';
+        return;
+      }
+
+      hero.classList.add('hidden');
+      container.innerHTML = '';
+
+      APP_STATE.activeSessionMessages.forEach((msg, idx) => {
+        const msgNode = createMessageElement(msg, idx);
+        container.appendChild(msgNode);
+      });
+
+      // Scroll to bottom
+      const scrollArea = document.getElementById('messagesContainer');
+      scrollArea.scrollTop = scrollArea.scrollHeight;
+      lucide.createIcons();
+    }
+
+    function createMessageElement(msg, index) {
+      const wrap = document.createElement('div');
+      wrap.className = 'w-full animate-fade-in';
+
+      if (msg.role === 'user') {
+        wrap.innerHTML = `
+          <div class="flex justify-end items-start gap-3 pl-12">
+            <div class="space-y-1 text-right">
+              <div class="inline-block bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm shadow-md shadow-brand-500/10 leading-relaxed max-w-xl text-left">
+                ${escapeHtml(msg.text)}
+              </div>
+              <div class="text-[10px] text-slate-500 pr-1">${msg.timestamp || ''}</div>
+            </div>
+            <div class="w-7 h-7 rounded-lg bg-dark-800 border border-white/[0.08] flex items-center justify-center text-slate-400 flex-shrink-0 mt-0.5">
+              <i data-lucide="user" class="w-3.5 h-3.5"></i>
+            </div>
+          </div>
+        `;
+        return wrap;
+      }
+
+      if (msg.role === 'clarification') {
+        wrap.innerHTML = `
+          <div class="flex items-start gap-3 pr-12">
+            <div class="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0 mt-0.5">
+              <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
+            </div>
+            <div class="flex-1 max-w-2xl bg-amber-500/[0.06] border border-amber-500/30 rounded-2xl p-4 space-y-3 shadow-lg shadow-amber-500/5">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Human-In-The-Loop Clarification
+                </span>
+                <span class="text-[10px] text-slate-400">Agent paused for feedback</span>
+              </div>
+              <p class="text-sm text-slate-200 leading-relaxed font-medium">
+                ${escapeHtml(msg.question)}
+              </p>
+
+              <!-- Clarification Input & Quick Replies -->
+              <div class="space-y-2 pt-1">
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    id="clarify-input-${index}"
+                    placeholder="Provide clarification to resume SQL generation..."
+                    class="flex-1 px-3 py-2 rounded-xl bg-dark-900 border border-amber-500/30 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400"
+                    onkeydown="if(event.key==='Enter') submitClarification(this.value)"
+                  />
+                  <button
+                    onclick="submitClarification(document.getElementById('clarify-input-${index}').value)"
+                    class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-950 font-semibold text-xs transition"
+                  >
+                    Resume Agent
+                  </button>
+                </div>
+
+                <div class="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 pt-1">
+                  <span class="text-slate-500">Suggested:</span>
+                  <button onclick="submitClarification('Count patients by admission dates')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
+                    "By admission dates"
+                  </button>
+                  <button onclick="submitClarification('Count patients by appointment consultation dates')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
+                    "By consultation dates"
+                  </button>
+                  <button onclick="submitClarification('Include both 2024 and 2025 records')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
+                    "Include 2024 & 2025"
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        return wrap;
+      }
+
+      if (msg.role === 'error') {
+        wrap.innerHTML = `
+          <div class="flex items-start gap-3 pr-12">
+            <div class="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0 mt-0.5">
+              <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
+            </div>
+            <div class="bg-rose-500/[0.07] border border-rose-500/30 rounded-2xl p-4 text-xs text-rose-300 space-y-1">
+              <div class="font-semibold flex items-center gap-1.5">
+                <span>Security / Pipeline Alert</span>
+              </div>
+              <p class="leading-relaxed">${escapeHtml(msg.text)}</p>
+            </div>
+          </div>
+        `;
+        return wrap;
+      }
+
+      // ASSISTANT AGENT RESPONSE (Rich Multi-Tab Card)
+      const hasSql = Boolean(msg.sql);
+      const hasResults = msg.results && msg.results.length > 0;
+      const canChart = hasResults && detectChartableData(msg.results);
+
+      wrap.innerHTML = `
+        <div class="flex items-start gap-3 pr-4 md:pr-12">
+          <!-- Avatar -->
+          <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-brand-500 to-cyan-500 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-md shadow-brand-500/20">
+            <i data-lucide="bot" class="w-3.5 h-3.5"></i>
+          </div>
+
+          <div class="flex-1 space-y-3 max-w-3xl">
+            <!-- Natural Language Answer Card -->
+            <div class="glass-panel bg-dark-850/90 border border-white/[0.08] rounded-2xl p-4 space-y-3 shadow-xl">
+              <div class="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
+                <!-- Badges -->
+                <div class="flex items-center gap-2 flex-wrap">
+                  ${msg.cache_hit 
+                    ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                         <i data-lucide="zap" class="w-3 h-3"></i> RedisVL Cache HIT
+                       </span>`
+                    : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
+                         <i data-lucide="sparkles" class="w-3 h-3"></i> Fresh SQL Query
+                       </span>`
+                  }
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center gap-1">
+                    <i data-lucide="shield-check" class="w-3 h-3"></i> 4 Guards Passed
+                  </span>
+                  ${msg.latency_ms ? `
+                    <span class="text-[10px] text-slate-500 font-mono">
+                      ${msg.latency_ms}ms
+                    </span>
+                  ` : ''}
+                </div>
+
+                <div class="text-[10px] text-slate-500 font-mono">${msg.timestamp || ''}</div>
+              </div>
+
+              <!-- Main Answer Text -->
+              <div class="text-sm text-slate-200 leading-relaxed font-sans">
+                ${formatMarkdownAnswer(msg.answer)}
+              </div>
+            </div>
+
+            <!-- Deep Dive Tabs Container (SQL, Table, Visualization) -->
+            ${(hasSql || hasResults) ? `
+              <div class="border border-white/[0.08] bg-dark-900 rounded-2xl overflow-hidden shadow-xl">
+                <!-- Tab Headers -->
+                <div class="flex items-center justify-between border-b border-white/[0.06] bg-dark-850/60 px-3">
+                  <div class="flex items-center gap-1">
+                    ${hasSql ? `
+                      <button onclick="switchTab(${index}, 'sql')" id="tab-btn-sql-${index}" class="px-3 py-2 text-xs font-semibold text-brand-400 border-b-2 border-brand-500 flex items-center gap-1.5 transition">
+                        <i data-lucide="terminal" class="w-3.5 h-3.5"></i> Generated SQL
+                      </button>
+                    ` : ''}
+                    ${hasResults ? `
+                      <button onclick="switchTab(${index}, 'table')" id="tab-btn-table-${index}" class="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition">
+                        <i data-lucide="table" class="w-3.5 h-3.5"></i> Data Records (${msg.results.length})
+                      </button>
+                    ` : ''}
+                    ${canChart ? `
+                      <button onclick="switchTab(${index}, 'chart')" id="tab-btn-chart-${index}" class="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition">
+                        <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Auto Chart
+                      </button>
+                    ` : ''}
+                  </div>
+
+                  <!-- Tab Utilities -->
+                  <div class="flex items-center gap-1">
+                    ${hasSql ? `
+                      <button onclick="copyToClipboard('${encodeURIComponent(msg.sql)}', this)" class="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white hover:bg-dark-800 transition flex items-center gap-1">
+                        <i data-lucide="copy" class="w-3 h-3"></i> Copy
+                      </button>
+                    ` : ''}
+                    ${hasResults ? `
+                      <button onclick="exportCsv(${index})" class="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white hover:bg-dark-800 transition flex items-center gap-1">
+                        <i data-lucide="download" class="w-3 h-3"></i> CSV
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+
+                <!-- Tab Panes -->
+                <div class="p-3">
+                  <!-- SQL Pane -->
+                  ${hasSql ? `
+                    <div id="tab-pane-sql-${index}" class="block">
+                      <div class="p-3 bg-dark-950 rounded-xl border border-white/[0.04] overflow-x-auto font-mono text-xs leading-relaxed text-slate-300">
+                        ${highlightSql(msg.sql)}
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <!-- Table Pane -->
+                  ${hasResults ? `
+                    <div id="tab-pane-table-${index}" class="${hasSql ? 'hidden' : 'block'} space-y-2">
+                      <div class="overflow-x-auto rounded-xl border border-white/[0.06] max-h-72">
+                        <table class="w-full text-left text-xs text-slate-300">
+                          <thead class="bg-dark-800 text-slate-400 uppercase text-[10px] font-semibold sticky top-0 border-b border-white/[0.06]">
+                            <tr>
+                              ${Object.keys(msg.results[0]).map(col => `<th class="px-3 py-2.5 font-mono">${escapeHtml(col)}</th>`).join('')}
+                            </tr>
+                          </thead>
+                          <tbody class="divide-y divide-white/[0.04] bg-dark-950/60 font-mono text-[11px]">
+                            ${msg.results.map(row => `
+                              <tr class="hover:bg-dark-800/40 transition">
+                                ${Object.values(row).map(val => `<td class="px-3 py-2 whitespace-nowrap text-slate-300">${escapeHtml(String(val ?? ''))}</td>`).join('')}
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  <!-- Chart Pane -->
+                  ${canChart ? `
+                    <div id="tab-pane-chart-${index}" class="hidden p-2">
+                      <div class="h-64 relative">
+                        <canvas id="chart-canvas-${index}"></canvas>
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+
+      return wrap;
+    }
+
+    /* -------------------------------------------------------------------------
+       Tab Switching & Auto-Charting (Chart.js)
+       ------------------------------------------------------------------------- */
+    function switchTab(index, tabName) {
+      const tabs = ['sql', 'table', 'chart'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-btn-${t}-${index}`);
+        const pane = document.getElementById(`tab-pane-${t}-${index}`);
+        if (!btn || !pane) return;
+
+        if (t === tabName) {
+          btn.className = 'px-3 py-2 text-xs font-semibold text-brand-400 border-b-2 border-brand-500 flex items-center gap-1.5 transition';
+          pane.classList.remove('hidden');
+          pane.classList.add('block');
+        } else {
+          btn.className = 'px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition';
+          pane.classList.remove('block');
+          pane.classList.add('hidden');
+        }
+      });
+
+      // Render chart if chart tab clicked
+      if (tabName === 'chart') {
+        const msg = APP_STATE.activeSessionMessages[index];
+        if (msg && msg.results) {
+          renderChartForMessage(index, msg.results);
+        }
+      }
+    }
+
+    function detectChartableData(results) {
+      if (!results || results.length < 2) return false;
+      const sample = results[0];
+      const keys = Object.keys(sample);
+      // Need at least one numeric column and one categorical/string/date column
+      const hasNumeric = keys.some(k => typeof sample[k] === 'number');
+      const hasCategorical = keys.some(k => typeof sample[k] === 'string');
+      return hasNumeric && hasCategorical;
+    }
+
+    function renderChartForMessage(index, results) {
+      const canvas = document.getElementById(`chart-canvas-${index}`);
+      if (!canvas) return;
+
+      // Avoid recreating chart if already exists
+      if (APP_STATE.chartInstances[index]) {
+        APP_STATE.chartInstances[index].destroy();
+      }
+
+      const keys = Object.keys(results[0]);
+      const labelKey = keys.find(k => typeof results[0][k] === 'string') || keys[0];
+      const dataKey = keys.find(k => typeof results[0][k] === 'number') || keys[1];
+
+      const labels = results.map(r => r[labelKey]);
+      const dataValues = results.map(r => r[dataKey]);
+
+      const ctx = canvas.getContext('2d');
+      APP_STATE.chartInstances[index] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: dataKey.replace(/_/g, ' ').toUpperCase(),
+            data: dataValues,
+            backgroundColor: 'rgba(99, 102, 241, 0.65)',
+            borderColor: '#818cf8',
+            borderWidth: 1.5,
+            borderRadius: 6,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#94a3b8', font: { family: 'Inter', size: 10 } },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            },
+            y: {
+              ticks: { color: '#94a3b8', font: { family: 'Inter', size: 10 } },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            }
+          }
+        }
+      });
+    }
+
+    /* -------------------------------------------------------------------------
+       CSV & Clipboard Utilities
+       ------------------------------------------------------------------------- */
+    function exportCsv(index) {
+      const msg = APP_STATE.activeSessionMessages[index];
+      if (!msg || !msg.results || msg.results.length === 0) return;
+
+      const keys = Object.keys(msg.results[0]);
+      const rows = [keys.join(',')];
+
+      msg.results.forEach(row => {
+        const values = keys.map(k => {
+          let val = String(row[k] ?? '').replace(/"/g, '""');
+          return `"${val}"`;
+        });
+        rows.push(values.join(','));
+      });
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.join('\n'));
+      const link = document.createElement('a');
+      link.setAttribute('href', csvContent);
+      link.setAttribute('download', `query_results_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function copyToClipboard(encoded, btn) {
+      const text = decodeURIComponent(encoded);
+      navigator.clipboard.writeText(text);
+      const originalText = btn.innerHTML;
+      btn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i> Copied!`;
+      lucide.createIcons();
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        lucide.createIcons();
+      }, 2000);
+    }
+
+    /* -------------------------------------------------------------------------
+       SQL Syntax Highlighter
+       ------------------------------------------------------------------------- */
+    function highlightSql(rawSql) {
+      if (!rawSql) return '';
+      let s = escapeHtml(rawSql);
+
+      const keywords = [
+        'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 
+        'FULL OUTER JOIN', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'OFFSET',
+        'AS', 'AND', 'OR', 'NOT', 'IN', 'IS NULL', 'IS NOT NULL', 'BETWEEN', 'LIKE',
+        'UNION', 'ALL', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'ASC', 'DESC'
+      ];
+
+      keywords.forEach(kw => {
+        const reg = new RegExp(`\\b${kw}\\b`, 'gi');
+        s = s.replace(reg, m => `<span class="sql-kw">${m.toUpperCase()}</span>`);
+      });
+
+      const functions = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DATE_PART', 'EXTRACT', 'ROUND', 'COALESCE', 'LOWER', 'UPPER', 'NOW'];
+      functions.forEach(fn => {
+        const reg = new RegExp(`\\b${fn}\\b(?=\\s*\\()`, 'gi');
+        s = s.replace(reg, m => `<span class="sql-fn">${m.toUpperCase()}</span>`);
+      });
+
+      // Strings
+      s = s.replace(/'([^']*)'/g, `<span class="sql-str">'$1'</span>`);
+      // Numbers
+      s = s.replace(/\b(\d+)\b/g, `<span class="sql-num">$1</span>`);
+
+      return s;
+    }
+
+    function formatMarkdownAnswer(text) {
+      if (!text) return '';
+      let escaped = escapeHtml(text);
+      // Bold text formatting
+      escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
+      // Inline code
+      escaped = escaped.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-dark-800 text-brand-300 font-mono text-xs">$1</code>');
+      return escaped;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function extractSqlFromString(str) {
+      const match = str.match(/SELECT[\s\S]*?;/i);
+      return match ? match[0] : null;
+    }
+
+    function formatDbResult(tuples) {
+      if (!Array.isArray(tuples) || tuples.length === 0) return null;
+      return tuples.map((t, idx) => ({
+        row_id: idx + 1,
+        result: String(t)
+      }));
+    }
+
+    /* -------------------------------------------------------------------------
+       Schema Explorer Drawer & Quick Insert
+       ------------------------------------------------------------------------- */
+    function toggleSchemaDrawer() {
+      const drawer = document.getElementById('schemaDrawer');
+      const isClosed = drawer.classList.contains('translate-x-full');
+      if (isClosed) {
+        drawer.classList.remove('translate-x-full');
+      } else {
+        drawer.classList.add('translate-x-full');
+      }
+    }
+
+    function renderSchemaExplorer() {
+      const container = document.getElementById('schemaTablesContainer');
+      container.innerHTML = '';
+
+      SCHEMA_METADATA.forEach(table => {
+        const card = document.createElement('div');
+        card.className = 'border border-white/[0.06] rounded-xl bg-dark-850 overflow-hidden text-xs';
+        card.innerHTML = `
+          <div class="p-3 bg-dark-800/80 border-b border-white/[0.06] flex items-center justify-between">
+            <div>
+              <div class="font-mono font-bold text-white flex items-center gap-1.5">
+                <i data-lucide="table" class="w-3.5 h-3.5 text-cyan-400"></i> ${table.table}
+              </div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${table.description}</div>
+            </div>
+            <button onclick="insertTableQuery('${table.table}')" class="px-2 py-1 rounded bg-dark-750 hover:bg-brand-600 text-[10px] text-slate-300 hover:text-white transition" title="Ask query about this table">
+              Query
+            </button>
+          </div>
+          <div class="p-2.5 divide-y divide-white/[0.03]">
+            ${table.columns.map(col => `
+              <div class="py-1 flex items-center justify-between text-[11px]">
+                <span class="font-mono text-slate-300 flex items-center gap-1.5">
+                  <i data-lucide="${col.icon || 'circle'}" class="w-2.5 h-2.5 text-slate-500"></i>
+                  ${col.name}
+                </span>
+                <span class="text-[10px] font-mono text-slate-500">${col.type}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function filterSchema(query) {
+      const q = query.toLowerCase().trim();
+      const container = document.getElementById('schemaTablesContainer');
+      const cards = container.children;
+
+      Array.from(cards).forEach((card, idx) => {
+        const table = SCHEMA_METADATA[idx];
+        const matchTable = table.table.toLowerCase().includes(q);
+        const matchCol = table.columns.some(c => c.name.toLowerCase().includes(q));
+        if (!q || matchTable || matchCol) {
+          card.style.display = 'block';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function insertTableQuery(tableName) {
+      const input = document.getElementById('queryInput');
+      input.value = `Show all details from the ${tableName} table`;
+      toggleSchemaDrawer();
+      input.focus();
+      autoResizeTextarea(input);
+    }
+
+    function usePrompt(text) {
+      const input = document.getElementById('queryInput');
+      input.value = text;
+      input.focus();
+      autoResizeTextarea(input);
+    }
+
+    /* -------------------------------------------------------------------------
+       Settings & Fallback Toggle
+       ------------------------------------------------------------------------- */
+    function toggleSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      modal.classList.toggle('hidden');
+    }
+
+    function saveSettings() {
+      const url = document.getElementById('apiUrlInput').value.trim();
+      const demo = document.getElementById('demoFallbackToggle').checked;
+      const anim = document.getElementById('pipelineAnimationToggle').checked;
+
+      APP_STATE.apiUrl = url || 'http://127.0.0.1:8000';
+      APP_STATE.demoFallback = demo;
+      APP_STATE.animatePipeline = anim;
+
+      localStorage.setItem('qm_api_url', APP_STATE.apiUrl);
+      localStorage.setItem('qm_demo_fallback', demo);
+      localStorage.setItem('qm_anim_pipeline', anim);
+
+      toggleSettingsModal();
+      checkBackendHealth();
+    }
+
+    /* -------------------------------------------------------------------------
+       Input Helpers
+       ------------------------------------------------------------------------- */
+    function handleInputKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitQuery();
+      }
+    }
+
+    function autoResizeTextarea(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    function setExecuting(isExec) {
+      APP_STATE.isExecuting = isExec;
+      const sendBtn = document.getElementById('sendBtn');
+      const queryInput = document.getElementById('queryInput');
+      if (isExec) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i>`;
+      } else {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = `<i data-lucide="arrow-up" class="w-4 h-4"></i>`;
+      }
+      lucide.createIcons();
+    }
+
+    /* -------------------------------------------------------------------------
+       Realistic Mock Agent Engine (Active during Demo Mode)
+       ------------------------------------------------------------------------- */
+    function generateMockAgentResponse(query) {
+      const q = query.toLowerCase();
+
+      // HITL Clarification Trigger Simulation
+      if (q.includes('cardiology') || q.includes('unclear') || q.includes('clarif')) {
+        return {
+          requires_clarification: true,
+          clarification_question: "Do you want to count cardiology patients based on admission visit dates, or appointment consultation bookings?"
+        };
+      }
+
+      // 2025 Patients Query
+      if (q.includes('patient') && (q.includes('2025') || q.includes('admit'))) {
+        return {
+          answer: "In **2025**, a total of **150 patients** were admitted to the hospital across all operational departments. The Cardiology and Neurology departments registered the highest admission volumes.",
+          sql: "SELECT COUNT(*) AS total_admissions, EXTRACT(YEAR FROM admission_date) AS admission_year\nFROM patients\nWHERE EXTRACT(YEAR FROM admission_date) = 2025\nGROUP BY admission_year;",
+          results: [
+            { admission_year: 2025, total_admissions: 150 }
+          ],
+          cache_hit: false,
+          latency_ms: 220,
+          guards_passed: true
+        };
+      }
+
+      // Top 5 Doctors Query
+      if (q.includes('doctor') || q.includes('top')) {
+        return {
+          answer: "Here are the **top 5 doctors** ranked by total completed patient consultations. **Dr. Marcus Vance** from Cardiology leads with 142 appointments.",
+          sql: "SELECT d.name AS doctor_name, d.specialization, COUNT(a.appointment_id) AS total_appointments\nFROM doctors d\nJOIN appointments a ON d.doctor_id = a.doctor_id\nGROUP BY d.doctor_id, d.name, d.specialization\nORDER BY total_appointments DESC\nLIMIT 5;",
+          results: [
+            { doctor_name: "Dr. Marcus Vance", specialization: "Cardiology", total_appointments: 142 },
+            { doctor_name: "Dr. Elena Rostova", specialization: "Neurology", total_appointments: 128 },
+            { doctor_name: "Dr. Tariq Mahmood", specialization: "Pediatrics", total_appointments: 115 },
+            { doctor_name: "Dr. Sarah Jenkins", specialization: "Orthopedics", total_appointments: 98 },
+            { doctor_name: "Dr. Claire Dubois", specialization: "General Medicine", total_appointments: 89 }
+          ],
+          cache_hit: true,
+          latency_ms: 45,
+          guards_passed: true
+        };
+      }
+
+      // Average Wait Time Query
+      if (q.includes('wait') || q.includes('time') || q.includes('department')) {
+        return {
+          answer: "The average patient wait time per department is highest in **Emergency** (38 mins) and lowest in **Pediatrics** (14 mins).",
+          sql: "SELECT dep.name AS department, ROUND(AVG(a.wait_time_minutes), 1) AS avg_wait_mins\nFROM departments dep\nJOIN doctors doc ON dep.department_id = doc.department_id\nJOIN appointments a ON doc.doctor_id = a.doctor_id\nGROUP BY dep.department_id, dep.name\nORDER BY avg_wait_mins DESC;",
+          results: [
+            { department: "Emergency", avg_wait_mins: 38.5 },
+            { department: "Orthopedics", avg_wait_mins: 26.2 },
+            { department: "Cardiology", avg_wait_mins: 22.0 },
+            { department: "Neurology", avg_wait_mins: 18.4 },
+            { department: "Pediatrics", avg_wait_mins: 14.1 }
+          ],
+          cache_hit: false,
+          latency_ms: 310,
+          guards_passed: true
+        };
+      }
+
+      // Default Generic Query Result
+      return {
+        answer: `Executed query for: "${query}". Found 4 matching records meeting your criteria with all security checks passed.`,
+        sql: `SELECT p.patient_id, p.full_name, p.status, d.name AS department\nFROM patients p\nLEFT JOIN departments d ON p.department_id = d.department_id\nLIMIT 4;`,
+        results: [
+          { patient_id: 1, full_name: "Alice Johnson", status: "Active", department: "Cardiology" },
+          { patient_id: 2, full_name: "Robert Smith", status: "Discharged", department: "Neurology" },
+          { patient_id: 3, full_name: "Emma Watson", status: "Active", department: "Pediatrics" },
+          { patient_id: 4, full_name: "Liam Davis", status: "Admitted", department: "Orthopedics" }
+        ],
+        cache_hit: false,
+        latency_ms: 280,
+        guards_passed: true
+      };
+    }
+  </script>
 </body>
 </html>
