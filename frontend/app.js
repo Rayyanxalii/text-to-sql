@@ -1,6 +1,6 @@
 /**
- * QueryMind — Frontend Application Logic
- * Agentic Text-to-SQL Pipeline UI
+ * QuerySentinel — Frontend Application Logic
+ * Minimalist Natural Language Database Interface
  */
 
 /* -------------------------------------------------------------------------
@@ -10,7 +10,6 @@ const APP_STATE = {
   apiUrl: localStorage.getItem('qm_api_url') || 'http://127.0.0.1:8000',
   isOnline: false,
   demoFallback: localStorage.getItem('qm_demo_fallback') !== 'false',
-  animatePipeline: localStorage.getItem('qm_anim_pipeline') !== 'false',
   currentConversationId: null,
   sessions: JSON.parse(localStorage.getItem('qm_sessions') || '[]'),
   activeSessionMessages: [],
@@ -19,67 +18,12 @@ const APP_STATE = {
   chartInstances: {},
 };
 
-// Hospital / Clinical Database Schema Metadata
-const SCHEMA_METADATA = [
-  {
-    table: 'patients',
-    description: 'Patient demographics and hospital admission details',
-    columns: [
-      { name: 'patient_id', type: 'INTEGER (PK)', icon: 'key' },
-      { name: 'full_name', type: 'VARCHAR(150)', icon: 'user' },
-      { name: 'age', type: 'INTEGER', icon: 'hash' },
-      { name: 'gender', type: 'VARCHAR(20)', icon: 'tag' },
-      { name: 'admission_date', type: 'TIMESTAMP', icon: 'calendar' },
-      { name: 'discharge_date', type: 'TIMESTAMP', icon: 'calendar' },
-      { name: 'department_id', type: 'INTEGER (FK)', icon: 'link' },
-      { name: 'status', type: 'VARCHAR(50)', icon: 'activity' }
-    ]
-  },
-  {
-    table: 'appointments',
-    description: 'Consultation records, doctor bookings and timings',
-    columns: [
-      { name: 'appointment_id', type: 'INTEGER (PK)', icon: 'key' },
-      { name: 'patient_id', type: 'INTEGER (FK)', icon: 'link' },
-      { name: 'doctor_id', type: 'INTEGER (FK)', icon: 'link' },
-      { name: 'appointment_date', type: 'TIMESTAMP', icon: 'calendar' },
-      { name: 'wait_time_minutes', type: 'INTEGER', icon: 'clock' },
-      { name: 'status', type: 'VARCHAR(50)', icon: 'activity' },
-      { name: 'consultation_fee', type: 'NUMERIC(10,2)', icon: 'dollar-sign' }
-    ]
-  },
-  {
-    table: 'doctors',
-    description: 'Medical staff directory, specialization, and department',
-    columns: [
-      { name: 'doctor_id', type: 'INTEGER (PK)', icon: 'key' },
-      { name: 'name', type: 'VARCHAR(120)', icon: 'user-check' },
-      { name: 'specialization', type: 'VARCHAR(100)', icon: 'award' },
-      { name: 'department_id', type: 'INTEGER (FK)', icon: 'link' },
-      { name: 'experience_years', type: 'INTEGER', icon: 'briefcase' },
-      { name: 'email', type: 'VARCHAR(150)', icon: 'mail' }
-    ]
-  },
-  {
-    table: 'departments',
-    description: 'Hospital wings, clinics, and administrative units',
-    columns: [
-      { name: 'department_id', type: 'INTEGER (PK)', icon: 'key' },
-      { name: 'name', type: 'VARCHAR(100)', icon: 'building' },
-      { name: 'floor_number', type: 'INTEGER', icon: 'layers' },
-      { name: 'head_doctor_id', type: 'INTEGER (FK)', icon: 'link' },
-      { name: 'annual_budget', type: 'NUMERIC(14,2)', icon: 'dollar-sign' }
-    ]
-  }
-];
-
 /* -------------------------------------------------------------------------
    Initialization
    ------------------------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   initSession();
-  renderSchemaExplorer();
   checkBackendHealth();
   setInterval(checkBackendHealth, 7000);
 });
@@ -100,7 +44,7 @@ async function checkBackendHealth() {
     if (res.ok) {
       APP_STATE.isOnline = true;
       dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-      label.innerHTML = `<span class="text-emerald-400 font-semibold">Live Backend</span> (8000)`;
+      label.innerHTML = `<span class="text-emerald-400 font-semibold">Live</span> (8000)`;
     } else {
       setOfflineState();
     }
@@ -114,7 +58,7 @@ function setOfflineState() {
   const dot = document.getElementById('connIndicator');
   const label = document.getElementById('connLabel');
   dot.className = 'w-2 h-2 rounded-full bg-cyan-400';
-  label.innerHTML = `<span class="text-cyan-400 font-medium">Demo Mode</span> · Agent Active`;
+  label.innerHTML = `<span class="text-cyan-400 font-medium">Demo Mode</span>`;
 }
 
 /* -------------------------------------------------------------------------
@@ -141,7 +85,7 @@ function startNewSession() {
 
   const newSession = {
     id: newId,
-    title: 'New Query Session',
+    title: 'New Query',
     timestamp: Date.now(),
     messages: []
   };
@@ -172,7 +116,7 @@ function saveSessions() {
 
 function updateSessionTitle(id, title) {
   const session = APP_STATE.sessions.find(s => s.id === id);
-  if (session && session.title === 'New Query Session') {
+  if (session && session.title === 'New Query') {
     session.title = title.length > 32 ? title.substring(0, 32) + '...' : title;
     saveSessions();
     renderSessionHistory();
@@ -223,7 +167,7 @@ function renderSessionHistory() {
 }
 
 /* -------------------------------------------------------------------------
-   Query Execution & Pipeline Handling
+   Query Execution & Response Handling
    ------------------------------------------------------------------------- */
 async function submitQuery() {
   if (APP_STATE.isExecuting) return;
@@ -243,11 +187,9 @@ async function submitQuery() {
   updateSessionTitle(APP_STATE.currentConversationId, question);
 
   setExecuting(true);
-  showPipelineTracker(true);
 
   try {
     if (APP_STATE.isOnline) {
-      await runPipelineStepsAnimation();
       const response = await fetch(`${APP_STATE.apiUrl}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,13 +201,14 @@ async function submitQuery() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server returned ${response.status}`);
+        throw new Error(errData.detail || `Server error (${response.status})`);
       }
 
       const result = await response.json();
       handleApiResponse(result, question);
     } else {
-      await runPipelineStepsAnimation();
+      // Demo response when backend is offline
+      await new Promise(r => setTimeout(r, 600));
       const mockResult = generateMockAgentResponse(question);
       handleApiResponse(mockResult, question);
     }
@@ -273,12 +216,11 @@ async function submitQuery() {
     console.error('Execution error:', err);
     addMessage({
       role: 'error',
-      text: `Query failed: ${err.message}. Please verify the backend status in the top bar.`,
+      text: `Request failed: ${err.message}`,
       timestamp: new Date().toLocaleTimeString()
     });
   } finally {
     setExecuting(false);
-    showPipelineTracker(false);
   }
 }
 
@@ -292,11 +234,9 @@ async function submitClarification(clarificationText) {
   };
   addMessage(userMsg);
   setExecuting(true);
-  showPipelineTracker(true);
 
   try {
     if (APP_STATE.isOnline) {
-      await runPipelineStepsAnimation();
       const response = await fetch(`${APP_STATE.apiUrl}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -314,9 +254,9 @@ async function submitClarification(clarificationText) {
       const result = await response.json();
       handleApiResponse(result, clarificationText);
     } else {
-      await runPipelineStepsAnimation();
+      await new Promise(r => setTimeout(r, 600));
       const simulatedResumeResult = {
-        answer: `Filtered results using clarification: "${clarificationText}". A total of 34 patients were recorded under this specific criteria.`,
+        answer: `Filtered results using clarification: "${clarificationText}". Total 34 patients matched.`,
         sql: `SELECT p.patient_id, p.full_name, p.age, d.name AS department, p.admission_date\nFROM patients p\nJOIN departments d ON p.department_id = d.department_id\nWHERE LOWER(d.name) = 'cardiology'\nORDER BY p.admission_date DESC\nLIMIT 10;`,
         results: [
           { patient_id: 104, full_name: "Sarah Miller", age: 54, department: "Cardiology", admission_date: "2025-08-14" },
@@ -326,113 +266,60 @@ async function submitClarification(clarificationText) {
         ],
         cache_hit: false,
         latency_ms: 380,
-        guards_passed: true
       };
       handleApiResponse(simulatedResumeResult, clarificationText);
     }
   } catch (err) {
     addMessage({
       role: 'error',
-      text: `Failed to resume clarification: ${err.message}`,
+      text: `Failed to resume: ${err.message}`,
       timestamp: new Date().toLocaleTimeString()
     });
   } finally {
     setExecuting(false);
-    showPipelineTracker(false);
   }
 }
 
 function handleApiResponse(data, originalQuery) {
+  // Clarification request
   if (data && data.requires_clarification) {
     APP_STATE.pendingClarification = true;
     addMessage({
       role: 'clarification',
-      question: data.clarification_question || 'Additional clarification required to form an exact SQL query.',
+      question: data.clarification_question || 'Additional clarification required to form an exact query.',
       timestamp: new Date().toLocaleTimeString()
     });
     return;
   }
 
+  // Plain string answer (FastAPI default)
   if (typeof data === 'string') {
-    const isRedacted = data.toLowerCase().includes('sensitive') || data.toLowerCase().includes('redact');
     addMessage({
       role: 'assistant',
       answer: data,
       sql: extractSqlFromString(data) || null,
       results: null,
       cache_hit: false,
-      latency_ms: 290,
-      guards_passed: true,
-      is_harmful: isRedacted,
+      latency_ms: null,
       timestamp: new Date().toLocaleTimeString()
     });
     return;
   }
 
+  // Structured response object
   addMessage({
     role: 'assistant',
-    answer: data.answer || 'Query evaluated successfully.',
+    answer: data.answer || 'Query completed successfully.',
     sql: data.sql || null,
     results: data.results || (data.db_result ? formatDbResult(data.db_result) : null),
     cache_hit: Boolean(data.cache_hit),
-    filter_tag: data.query_filters ? data.query_filters.resolved_prompt : null,
-    latency_ms: data.latency_ms || Math.floor(Math.random() * 200 + 180),
-    guards_passed: data.answer_harmful !== true,
-    is_harmful: Boolean(data.answer_harmful),
+    latency_ms: data.latency_ms || null,
     timestamp: new Date().toLocaleTimeString()
   });
 }
 
 /* -------------------------------------------------------------------------
-   Animated Pipeline Stepper Logic
-   ------------------------------------------------------------------------- */
-function showPipelineTracker(show) {
-  const tracker = document.getElementById('pipelineTracker');
-  if (show && APP_STATE.animatePipeline) {
-    tracker.classList.remove('hidden');
-  } else {
-    tracker.classList.add('hidden');
-    resetPipelineSteps();
-  }
-}
-
-function resetPipelineSteps() {
-  const stepIds = ['input_guard', 'meta_guard', 'clarification', 'cache', 'sql_gen', 'sql_safety', 'db_exec', 'output_guard'];
-  stepIds.forEach(id => {
-    const el = document.getElementById(`step-${id}`);
-    if (el) {
-      el.className = 'px-2 py-0.5 rounded border border-white/[0.08] bg-dark-800 text-slate-400 transition-all';
-    }
-  });
-}
-
-async function runPipelineStepsAnimation() {
-  if (!APP_STATE.animatePipeline) return;
-  const steps = [
-    { id: 'input_guard', label: 'Regex Guard OK', delay: 100 },
-    { id: 'meta_guard', label: 'DeBERTa Guard OK', delay: 140 },
-    { id: 'clarification', label: 'Query Clear', delay: 100 },
-    { id: 'cache', label: 'RedisVL Checked', delay: 120 },
-    { id: 'sql_gen', label: 'LLM SQL Built', delay: 160 },
-    { id: 'sql_safety', label: 'sqlglot Validated', delay: 110 },
-    { id: 'db_exec', label: 'Postgres Executed', delay: 150 },
-    { id: 'output_guard', label: 'Presidio Verified', delay: 90 },
-  ];
-
-  for (const step of steps) {
-    const el = document.getElementById(`step-${step.id}`);
-    if (el) {
-      el.className = 'px-2 py-0.5 rounded border border-brand-500/40 bg-brand-500/20 text-brand-300 font-semibold shadow-sm shadow-brand-500/30 scale-105 transition-all';
-    }
-    await new Promise(r => setTimeout(r, step.delay));
-    if (el) {
-      el.className = 'px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 transition-all';
-    }
-  }
-}
-
-/* -------------------------------------------------------------------------
-   Render Messages & Dynamic Views
+   Render Messages & Views
    ------------------------------------------------------------------------- */
 function addMessage(msg) {
   APP_STATE.activeSessionMessages.push(msg);
@@ -499,9 +386,8 @@ function createMessageElement(msg, index) {
         <div class="flex-1 max-w-2xl bg-amber-500/[0.06] border border-amber-500/30 rounded-2xl p-4 space-y-3 shadow-lg shadow-amber-500/5">
           <div class="flex items-center gap-2">
             <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Human-In-The-Loop Clarification
+              Clarification Needed
             </span>
-            <span class="text-[10px] text-slate-400">Agent paused for feedback</span>
           </div>
           <p class="text-sm text-slate-200 leading-relaxed font-medium">
             ${escapeHtml(msg.question)}
@@ -512,7 +398,7 @@ function createMessageElement(msg, index) {
               <input
                 type="text"
                 id="clarify-input-${index}"
-                placeholder="Provide clarification to resume SQL generation..."
+                placeholder="Type your clarification..."
                 class="flex-1 px-3 py-2 rounded-xl bg-dark-900 border border-amber-500/30 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400"
                 onkeydown="if(event.key==='Enter') submitClarification(this.value)"
               />
@@ -520,20 +406,17 @@ function createMessageElement(msg, index) {
                 onclick="submitClarification(document.getElementById('clarify-input-${index}').value)"
                 class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-950 font-semibold text-xs transition"
               >
-                Resume Agent
+                Continue
               </button>
             </div>
 
             <div class="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 pt-1">
-              <span class="text-slate-500">Suggested:</span>
+              <span class="text-slate-500">Quick options:</span>
               <button onclick="submitClarification('Count patients by admission dates')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
                 "By admission dates"
               </button>
               <button onclick="submitClarification('Count patients by appointment consultation dates')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
                 "By consultation dates"
-              </button>
-              <button onclick="submitClarification('Include both 2024 and 2025 records')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
-                "Include 2024 & 2025"
               </button>
             </div>
           </div>
@@ -550,9 +433,7 @@ function createMessageElement(msg, index) {
           <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
         </div>
         <div class="bg-rose-500/[0.07] border border-rose-500/30 rounded-2xl p-4 text-xs text-rose-300 space-y-1">
-          <div class="font-semibold flex items-center gap-1.5">
-            <span>Security / Pipeline Alert</span>
-          </div>
+          <div class="font-semibold">Notice</div>
           <p class="leading-relaxed">${escapeHtml(msg.text)}</p>
         </div>
       </div>
@@ -560,7 +441,7 @@ function createMessageElement(msg, index) {
     return wrap;
   }
 
-  // Assistant Agent Response
+  // Assistant Response Card
   const hasSql = Boolean(msg.sql);
   const hasResults = msg.results && msg.results.length > 0;
   const canChart = hasResults && detectChartableData(msg.results);
@@ -571,21 +452,16 @@ function createMessageElement(msg, index) {
         <i data-lucide="bot" class="w-3.5 h-3.5"></i>
       </div>
 
-      <div class="flex-1 space-y-3 max-w-3xl">
+      <div class="flex-1 space-y-3 max-w-2xl">
         <div class="glass-panel bg-dark-850/90 border border-white/[0.08] rounded-2xl p-4 space-y-3 shadow-xl">
-          <div class="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
-            <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex items-center justify-between border-b border-white/[0.06] pb-2">
+            <div class="flex items-center gap-2">
               ${msg.cache_hit 
-                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                     <i data-lucide="zap" class="w-3 h-3"></i> RedisVL Cache HIT
+                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                     Cache HIT
                    </span>`
-                : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
-                     <i data-lucide="sparkles" class="w-3 h-3"></i> Fresh SQL Query
-                   </span>`
+                : ''
               }
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center gap-1">
-                <i data-lucide="shield-check" class="w-3 h-3"></i> 4 Guards Passed
-              </span>
               ${msg.latency_ms ? `
                 <span class="text-[10px] text-slate-500 font-mono">
                   ${msg.latency_ms}ms
@@ -607,17 +483,17 @@ function createMessageElement(msg, index) {
               <div class="flex items-center gap-1">
                 ${hasSql ? `
                   <button onclick="switchTab(${index}, 'sql')" id="tab-btn-sql-${index}" class="px-3 py-2 text-xs font-semibold text-brand-400 border-b-2 border-brand-500 flex items-center gap-1.5 transition">
-                    <i data-lucide="terminal" class="w-3.5 h-3.5"></i> Generated SQL
+                    <i data-lucide="terminal" class="w-3.5 h-3.5"></i> SQL
                   </button>
                 ` : ''}
                 ${hasResults ? `
                   <button onclick="switchTab(${index}, 'table')" id="tab-btn-table-${index}" class="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition">
-                    <i data-lucide="table" class="w-3.5 h-3.5"></i> Data Records (${msg.results.length})
+                    <i data-lucide="table" class="w-3.5 h-3.5"></i> Results (${msg.results.length})
                   </button>
                 ` : ''}
                 ${canChart ? `
                   <button onclick="switchTab(${index}, 'chart')" id="tab-btn-chart-${index}" class="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition">
-                    <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Auto Chart
+                    <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Chart
                   </button>
                 ` : ''}
               </div>
@@ -872,81 +748,6 @@ function formatDbResult(tuples) {
   }));
 }
 
-/* -------------------------------------------------------------------------
-   Schema Explorer Drawer & Quick Insert
-   ------------------------------------------------------------------------- */
-function toggleSchemaDrawer() {
-  const drawer = document.getElementById('schemaDrawer');
-  const isClosed = drawer.classList.contains('translate-x-full');
-  if (isClosed) {
-    drawer.classList.remove('translate-x-full');
-  } else {
-    drawer.classList.add('translate-x-full');
-  }
-}
-
-function renderSchemaExplorer() {
-  const container = document.getElementById('schemaTablesContainer');
-  container.innerHTML = '';
-
-  SCHEMA_METADATA.forEach(table => {
-    const card = document.createElement('div');
-    card.className = 'border border-white/[0.06] rounded-xl bg-dark-850 overflow-hidden text-xs';
-    card.innerHTML = `
-      <div class="p-3 bg-dark-800/80 border-b border-white/[0.06] flex items-center justify-between">
-        <div>
-          <div class="font-mono font-bold text-white flex items-center gap-1.5">
-            <i data-lucide="table" class="w-3.5 h-3.5 text-cyan-400"></i> ${table.table}
-          </div>
-          <div class="text-[10px] text-slate-400 mt-0.5">${table.description}</div>
-        </div>
-        <button onclick="insertTableQuery('${table.table}')" class="px-2 py-1 rounded bg-dark-750 hover:bg-brand-600 text-[10px] text-slate-300 hover:text-white transition" title="Ask query about this table">
-          Query
-        </button>
-      </div>
-      <div class="p-2.5 divide-y divide-white/[0.03]">
-        ${table.columns.map(col => `
-          <div class="py-1 flex items-center justify-between text-[11px]">
-            <span class="font-mono text-slate-300 flex items-center gap-1.5">
-              <i data-lucide="${col.icon || 'circle'}" class="w-2.5 h-2.5 text-slate-500"></i>
-              ${col.name}
-            </span>
-            <span class="text-[10px] font-mono text-slate-500">${col.type}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    container.appendChild(card);
-  });
-
-  lucide.createIcons();
-}
-
-function filterSchema(query) {
-  const q = query.toLowerCase().trim();
-  const container = document.getElementById('schemaTablesContainer');
-  const cards = container.children;
-
-  Array.from(cards).forEach((card, idx) => {
-    const table = SCHEMA_METADATA[idx];
-    const matchTable = table.table.toLowerCase().includes(q);
-    const matchCol = table.columns.some(c => c.name.toLowerCase().includes(q));
-    if (!q || matchTable || matchCol) {
-      card.style.display = 'block';
-    } else {
-      card.style.display = 'none';
-    }
-  });
-}
-
-function insertTableQuery(tableName) {
-  const input = document.getElementById('queryInput');
-  input.value = `Show all details from the ${tableName} table`;
-  toggleSchemaDrawer();
-  input.focus();
-  autoResizeTextarea(input);
-}
-
 function usePrompt(text) {
   const input = document.getElementById('queryInput');
   input.value = text;
@@ -955,7 +756,7 @@ function usePrompt(text) {
 }
 
 /* -------------------------------------------------------------------------
-   Settings & Fallback Toggle
+   Settings
    ------------------------------------------------------------------------- */
 function toggleSettingsModal() {
   const modal = document.getElementById('settingsModal');
@@ -965,15 +766,12 @@ function toggleSettingsModal() {
 function saveSettings() {
   const url = document.getElementById('apiUrlInput').value.trim();
   const demo = document.getElementById('demoFallbackToggle').checked;
-  const anim = document.getElementById('pipelineAnimationToggle').checked;
 
   APP_STATE.apiUrl = url || 'http://127.0.0.1:8000';
   APP_STATE.demoFallback = demo;
-  APP_STATE.animatePipeline = anim;
 
   localStorage.setItem('qm_api_url', APP_STATE.apiUrl);
   localStorage.setItem('qm_demo_fallback', demo);
-  localStorage.setItem('qm_anim_pipeline', anim);
 
   toggleSettingsModal();
   checkBackendHealth();
@@ -1008,12 +806,11 @@ function setExecuting(isExec) {
 }
 
 /* -------------------------------------------------------------------------
-   Mock Agent Engine (Demo / Fallback Mode)
+   Mock Agent Engine (Demo / Offline Fallback)
    ------------------------------------------------------------------------- */
 function generateMockAgentResponse(query) {
   const q = query.toLowerCase();
 
-  // HITL Clarification Trigger Simulation
   if (q.includes('cardiology') || q.includes('unclear') || q.includes('clarif')) {
     return {
       requires_clarification: true,
@@ -1021,24 +818,21 @@ function generateMockAgentResponse(query) {
     };
   }
 
-  // 2025 Patients Query
   if (q.includes('patient') && (q.includes('2025') || q.includes('admit'))) {
     return {
-      answer: "In **2025**, a total of **150 patients** were admitted to the hospital across all operational departments. The Cardiology and Neurology departments registered the highest admission volumes.",
+      answer: "In **2025**, a total of **150 patients** were admitted to the hospital across all operational departments.",
       sql: "SELECT COUNT(*) AS total_admissions, EXTRACT(YEAR FROM admission_date) AS admission_year\nFROM patients\nWHERE EXTRACT(YEAR FROM admission_date) = 2025\nGROUP BY admission_year;",
       results: [
         { admission_year: 2025, total_admissions: 150 }
       ],
       cache_hit: false,
-      latency_ms: 220,
-      guards_passed: true
+      latency_ms: 220
     };
   }
 
-  // Top 5 Doctors Query
   if (q.includes('doctor') || q.includes('top')) {
     return {
-      answer: "Here are the **top 5 doctors** ranked by total completed patient consultations. **Dr. Marcus Vance** from Cardiology leads with 142 appointments.",
+      answer: "Here are the **top 5 doctors** ranked by total completed patient consultations. **Dr. Marcus Vance** leads with 142 appointments.",
       sql: "SELECT d.name AS doctor_name, d.specialization, COUNT(a.appointment_id) AS total_appointments\nFROM doctors d\nJOIN appointments a ON d.doctor_id = a.doctor_id\nGROUP BY d.doctor_id, d.name, d.specialization\nORDER BY total_appointments DESC\nLIMIT 5;",
       results: [
         { doctor_name: "Dr. Marcus Vance", specialization: "Cardiology", total_appointments: 142 },
@@ -1048,15 +842,13 @@ function generateMockAgentResponse(query) {
         { doctor_name: "Dr. Claire Dubois", specialization: "General Medicine", total_appointments: 89 }
       ],
       cache_hit: true,
-      latency_ms: 45,
-      guards_passed: true
+      latency_ms: 45
     };
   }
 
-  // Average Wait Time Query
   if (q.includes('wait') || q.includes('time') || q.includes('department')) {
     return {
-      answer: "The average patient wait time per department is highest in **Emergency** (38 mins) and lowest in **Pediatrics** (14 mins).",
+      answer: "The average patient wait time is highest in **Emergency** (38.5 mins) and lowest in **Pediatrics** (14.1 mins).",
       sql: "SELECT dep.name AS department, ROUND(AVG(a.wait_time_minutes), 1) AS avg_wait_mins\nFROM departments dep\nJOIN doctors doc ON dep.department_id = doc.department_id\nJOIN appointments a ON doc.doctor_id = a.doctor_id\nGROUP BY dep.department_id, dep.name\nORDER BY avg_wait_mins DESC;",
       results: [
         { department: "Emergency", avg_wait_mins: 38.5 },
@@ -1066,14 +858,12 @@ function generateMockAgentResponse(query) {
         { department: "Pediatrics", avg_wait_mins: 14.1 }
       ],
       cache_hit: false,
-      latency_ms: 310,
-      guards_passed: true
+      latency_ms: 310
     };
   }
 
-  // Default Generic Query Result
   return {
-    answer: `Executed query for: "${query}". Found 4 matching records meeting your criteria with all security checks passed.`,
+    answer: `Executed query for: "${query}". Found 4 matching records meeting your criteria.`,
     sql: `SELECT p.patient_id, p.full_name, p.status, d.name AS department\nFROM patients p\nLEFT JOIN departments d ON p.department_id = d.department_id\nLIMIT 4;`,
     results: [
       { patient_id: 1, full_name: "Alice Johnson", status: "Active", department: "Cardiology" },
@@ -1082,7 +872,6 @@ function generateMockAgentResponse(query) {
       { patient_id: 4, full_name: "Liam Davis", status: "Admitted", department: "Orthopedics" }
     ],
     cache_hit: false,
-    latency_ms: 280,
-    guards_passed: true
+    latency_ms: 280
   };
 }
