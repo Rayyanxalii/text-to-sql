@@ -141,9 +141,10 @@ text-to-sql/
 │   ├── .gitignore                           # Backend-specific gitignore
 │   └── graph.png                            # LangGraph visualization artifact
 ├── frontend/
-│   ├── index.html                           # QuerySentinel web UI layout & markup
-│   ├── app.js                               # Frontend logic: state, API calls, Chart.js & markdown rendering
-│   └── style.css                            # UI styling, animations, glassmorphism & dark grid effects
+│   ├── index.html                           # Query Sentinel minimalist SaaS web UI
+│   ├── app.js                               # Frontend controller: state, API calls, tabbed panels, SQL & table rendering
+│   ├── config.js                            # Configurable runtime environment configuration
+│   └── style.css                            # Minimalist dark theme: typography, SQL syntax highlighting & tables
 ├── .gitignore                               # Root-level gitignore
 └── README.md                                # Central project documentation
 ```
@@ -227,24 +228,27 @@ The interactive OpenAPI documentation will be available at [http://127.0.0.1:800
 
 The frontend is a lightweight, zero-build client:
 
-1. Serve the `frontend/` directory using any static file server:
+1. Navigate to the `frontend/` directory:
    ```bash
-   # From the project root
-   python -m http.server 3000 --directory frontend
+   cd frontend
    ```
-2. Open your browser and navigate to [http://127.0.0.1:3000](http://127.0.0.1:3000) (or open `frontend/index.html` directly).
-3. The top navbar displays a **Live (8000)** status pill once connected to the running backend. If your backend runs on a different port or host, click the slider icon in the header to update the API endpoint.
+2. Start the HTTP server:
+   ```bash
+   python -m http.server 3000
+   ```
+3. Open your browser and navigate to [http://127.0.0.1:3000](http://127.0.0.1:3000).
+4. The sidebar displays a **PostgreSQL Live** status pill once connected to the running backend. If your backend runs on a different port or host, click **Settings** to update the API endpoint.
 
 ---
 
-## 🖥️ QuerySentinel Frontend Highlights
+## 🖥️ Query Sentinel Minimalist Frontend Highlights
 
-- **Conversational Chat & Starter Prompts**: Ask questions in plain English or select from pre-configured domain starter queries.
-- **Tabular Data Presentation & Auto-Generated Charts**: Query results automatically render as clean tables, with automated bar, line, or doughnut charts generated via Chart.js for aggregated metrics.
-- **Syntax-Highlighted SQL Cards**: View generated SQL queries with single-click copy-to-clipboard functionality.
-- **Human-in-the-Loop Clarification**: When an ambiguous query triggers LangGraph's interrupt, an interactive clarification card appears with follow-up questions and direct response submission.
-- **Session History**: Create, switch between, and persist multiple query sessions in browser `localStorage`.
-- **API Settings & Demo Fallback**: Easily modify backend connection endpoints and toggle demo fallback mode for offline testing.
+- **Developer-Grade Minimalist UI**: Polished dark theme inspired by ChatGPT and Linear with deep charcoal tones, subtle borders, and restrained indigo accents.
+- **Collapsible Sidebar & Session Persistence**: Manage multi-turn query threads stored in browser `localStorage` with fast switching, `Ctrl+K` shortcut, and collapsible navigation.
+- **Real-Time Backend Health Monitoring**: Live connection indicator polling `GET /` to verify PostgreSQL backend readiness with no fake demo data.
+- **Tabbed Query Inspection**: Clean separation between natural-language answers, syntax-highlighted SQL code blocks with one-click copy, and structured tabular result views with CSV export.
+- **Human-in-the-Loop Clarification**: Clean disambiguation cards with inline continuation inputs and automatic resume via `clarification_answer`.
+- **Configurable Environment**: Backend URL configurable via `config.js` or through the in-app Connection Settings modal.
 
 ---
 

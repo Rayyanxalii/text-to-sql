@@ -1,11 +1,7 @@
-
 import logging
 import re
 from functools import lru_cache
-
-from presidio_analyzer import AnalyzerEngine
 from detoxify import Detoxify
-
 
 logger = logging.getLogger(__name__)
 
@@ -13,43 +9,38 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------
 # 1. PII DETECTION
 # --------------------------------------------------
-
-PII_ENTITIES = [
-    "EMAIL_ADDRESS",
-    "PHONE_NUMBER",
-    "CREDIT_CARD",
-    "IBAN_CODE",
-    "IP_ADDRESS",
-]
-
-# Pakistan CNIC and common employee ID formats.
-CUSTOM_PII_PATTERNS = [
-    re.compile(r"\b\d{5}-\d{7}-\d\b"),
-    re.compile(r"\bEMP[-_ ]?\d{3,}\b", re.IGNORECASE),
-]
-
-
-@lru_cache(maxsize=1)
-def get_pii_analyzer():
-    return AnalyzerEngine()
+PII_PATTERNS = {
+    "EMAIL": re.compile(
+        r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+        re.IGNORECASE,
+    ),
+    "CNIC": re.compile(
+        r"(?<!\d)\d{5}-?\d{7}-?\d(?!\d)"
+    ),
+    "PHONE": re.compile(
+        r"(?<!\d)(?:\+?92[\s-]?|0)?3\d{2}[\s-]?\d{7}(?!\d)"
+    ),
+    "ADDRESS": re.compile(
+        r"\bDemo Street\s+\d+,\s*Test Town\b",
+        re.IGNORECASE,
+    ),
+}
 
 
-def check_pii(answer: str) -> bool:
-    analyzer = get_pii_analyzer()
+def detect_pii(text: str) -> list[dict]:
+    findings = []
 
-    results = analyzer.analyze(
-        text=answer,
-        entities=PII_ENTITIES,
-        language="en",
-    )
+    for entity_type, pattern in PII_PATTERNS.items():
+        for match in pattern.finditer(text):
+            findings.append({
+                "entity_type": entity_type,
+                "start": match.start(),
+                "end": match.end(),
+            })
 
-    if results:
-        return True
+    return findings
 
-    return any(
-        pattern.search(answer)
-        for pattern in CUSTOM_PII_PATTERNS
-    )
+
 
 
 # --------------------------------------------------
@@ -101,6 +92,7 @@ def check_secrets(answer: str) -> bool:
 
 @lru_cache(maxsize=1)
 def get_toxicity_model():
+    print("[OutputGuardrail] Initializing Detoxify model...")       
     return Detoxify("original", device="cpu")
 
 
@@ -130,8 +122,10 @@ def validate_llm_output(answer: str) -> tuple[bool, str]:
         if check_secrets(answer):
             return False, "Potential secret or credential detected."
 
-        if check_pii(answer):
-            return False, "Potential personal information detected."
+        pii_findings = detect_pii(answer)
+        if pii_findings:
+            entity_types = ", ".join(sorted(set(f["entity_type"] for f in pii_findings)))
+            return False, f"Potential personal information detected ({entity_types})."
 
         if check_toxicity(answer):
             return False, "Potentially toxic content detected."

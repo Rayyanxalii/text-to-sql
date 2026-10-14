@@ -1,40 +1,247 @@
-/* Custom Scrollbar */
+/* ==========================================================================
+   Query Sentinel — Linear / Developer SaaS Design System
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg-app: #08090d;
+  --bg-sidebar: #0c0d13;
+  --bg-panel: #11131c;
+  --bg-card: #151824;
+  --bg-input: #131520;
+  --bg-hover: #1b1e2c;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-medium: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --accent-primary: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-glow: rgba(99, 102, 241, 0.15);
+  --text-main: #f4f4f8;
+  --text-muted: #8b92a5;
+  --text-dim: #545b70;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
+
 ::-webkit-scrollbar-track {
-  background: rgba(11, 13, 19, 0.6);
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #2a3142;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #4f46e5;
+  background: rgba(255, 255, 255, 0.25);
 }
 
-/* Ambient background grid */
-.bg-grid {
-  background-image: 
-    radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
-    radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.06) 0%, transparent 45%),
-    radial-gradient(rgba(99, 102, 241, 0.12) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 28px 28px;
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #ffffff;
 }
 
-/* Code syntax highlighting */
-.sql-kw  { color: #818cf8; font-weight: 600; }
-.sql-fn  { color: #c084fc; font-weight: 600; }
-.sql-str { color: #34d399; }
-.sql-num { color: #fbbf24; }
-.sql-tbl { color: #38bdf8; }
-.sql-cmt { color: #64748b; font-style: italic; }
+/* --------------------------------------------------------------------------
+   Linear-Style Surfaces & Borders
+   -------------------------------------------------------------------------- */
+.surface-sidebar {
+  background-color: var(--bg-sidebar);
+  border-color: var(--border-subtle);
+}
 
-/* Glassmorphism effect */
-.glass-panel {
-  background: rgba(16, 19, 28, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+.surface-panel {
+  background-color: var(--bg-panel);
+  border-color: var(--border-subtle);
+}
+
+.surface-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+.surface-hover:hover {
+  background-color: var(--bg-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Prompt & Starter Cards (Linear / Raycast Style)
+   -------------------------------------------------------------------------- */
+.prompt-card {
+  background: linear-gradient(180deg, rgba(21, 24, 36, 0.7) 0%, rgba(17, 19, 28, 0.7) 100%);
   border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.prompt-card:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: linear-gradient(180deg, rgba(27, 30, 44, 0.8) 0%, rgba(20, 22, 33, 0.8) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px var(--accent-glow);
+}
+
+/* --------------------------------------------------------------------------
+   Elevated Chat Input (ChatGPT / Linear Style)
+   -------------------------------------------------------------------------- */
+.chat-input-wrapper {
+  background-color: var(--bg-input);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: all 0.18s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4), 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* --------------------------------------------------------------------------
+   Developer SQL Code Block
+   -------------------------------------------------------------------------- */
+.sql-console {
+  background-color: #06070a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.sql-token-kw   { color: #818cf8; font-weight: 600; }
+.sql-token-fn   { color: #c084fc; font-weight: 500; }
+.sql-token-str  { color: #34d399; }
+.sql-token-num  { color: #fbbf24; }
+.sql-token-tbl  { color: #38bdf8; }
+.sql-token-cmt  { color: #52525b; font-style: italic; }
+.sql-token-op   { color: #f472b6; }
+
+/* --------------------------------------------------------------------------
+   Supabase / TablePlus Style Data Grid
+   -------------------------------------------------------------------------- */
+.data-table-wrapper {
+  background-color: #08090d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+}
+
+.data-table th {
+  background-color: #0f1118;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.data-table tr:nth-child(even) td {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.data-table tr:hover td {
+  background-color: rgba(99, 102, 241, 0.06);
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* --------------------------------------------------------------------------
+   Markdown Typography
+   -------------------------------------------------------------------------- */
+.prose-content {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: #e2e8f0;
+}
+
+.prose-content p {
+  margin-bottom: 0.65rem;
+}
+
+.prose-content p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-content strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.prose-content code:not(pre code) {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8em;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  color: #a5b4fc;
+}
+
+.prose-content ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.65rem;
+}
+
+.prose-content li {
+  margin-bottom: 0.25rem;
+}
+
+/* Micro-animations */
+.fade-in {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Loading indicator pulses */
+.pulse-dot {
+  animation: pulseDot 1.4s ease-in-out infinite both;
+}
+
+.pulse-dot:nth-child(1) { animation-delay: -0.32s; }
+.pulse-dot:nth-child(2) { animation-delay: -0.16s; }
+.pulse-dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes pulseDot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
 }

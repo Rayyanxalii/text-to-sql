@@ -48,7 +48,7 @@ def generate_answer(graph_state: state):
             "messages": [AIMessage(content=sql_safety_text)],
         }
 
-    if permission_denied:
+    if permission_denied: 
         permission_denied_text = "I'm sorry, but you do not have permission to execute this query."
         return {
             "answer": permission_denied_text,
@@ -68,6 +68,7 @@ def generate_answer(graph_state: state):
             "sql_execution_error": sql_execution_error,
             "messages": recent_messages,
         })
+        print(f'DB result: {db_result}')
         content = answer.content if hasattr(answer, "content") else str(answer)
         if not content.strip():
             if db_result is not None:

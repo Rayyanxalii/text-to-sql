@@ -1,84 +1,116 @@
 /**
- * QuerySentinel — Frontend Application Logic
- * Minimalist Natural Language Database Interface
+ * Query Sentinel — Frontend Application Controller
+ * Minimalist, developer-grade interface for AI-powered Text-to-SQL
  */
 
-/* -------------------------------------------------------------------------
-   State & Configuration
-   ------------------------------------------------------------------------- */
+/* ==========================================================================
+   1. State & Configuration
+   ========================================================================== */
 const APP_STATE = {
-  apiUrl: localStorage.getItem('qm_api_url') || 'http://127.0.0.1:8000',
+  // Configurable Backend API endpoint
+  apiUrl: (typeof window !== 'undefined' && localStorage.getItem('qs_api_url')) 
+    || (window.QUERY_SENTINEL_CONFIG && window.QUERY_SENTINEL_CONFIG.API_URL) 
+    || 'http://127.0.0.1:8000',
+
   isOnline: false,
-  demoFallback: localStorage.getItem('qm_demo_fallback') !== 'false',
-  currentConversationId: null,
-  sessions: JSON.parse(localStorage.getItem('qm_sessions') || '[]'),
-  activeSessionMessages: [],
-  pendingClarification: false,
   isExecuting: false,
-  chartInstances: {},
+  pendingClarification: false,
+  currentConversationId: null,
+  activeSessionMessages: [],
+  sessions: [],
+  sidebarCollapsed: false,
 };
 
-/* -------------------------------------------------------------------------
-   Initialization
-   ------------------------------------------------------------------------- */
+/* ==========================================================================
+   2. Lifecycle Initialization
+   ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
-  lucide.createIcons();
-  initSession();
+  initStorage();
+  initSidebarState();
+  initIcons();
   checkBackendHealth();
-  setInterval(checkBackendHealth, 7000);
+
+  // Background health check polling
+  const pollInterval = (window.QUERY_SENTINEL_CONFIG && window.QUERY_SENTINEL_CONFIG.HEALTH_CHECK_INTERVAL_MS) || 10000;
+  setInterval(checkBackendHealth, pollInterval);
+
+  // Global Keyboard Shortcuts
+  document.addEventListener('keydown', handleGlobalKeydown);
 });
 
-/* -------------------------------------------------------------------------
-   Backend Connectivity Check
-   ------------------------------------------------------------------------- */
+function initIcons() {
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
+}
+
+/* ==========================================================================
+   3. Backend Connectivity & Health Check
+   ========================================================================== */
 async function checkBackendHealth() {
   const dot = document.getElementById('connIndicator');
   const label = document.getElementById('connLabel');
+  if (!dot || !label) return;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
     const res = await fetch(`${APP_STATE.apiUrl}/`, {
       method: 'GET',
-      signal: AbortSignal.timeout(2800)
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       APP_STATE.isOnline = true;
       dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-      label.innerHTML = `<span class="text-emerald-400 font-semibold">Live</span> (8000)`;
+      label.textContent = 'PostgreSQL Live';
+      label.className = 'text-[11px] text-emerald-300 font-mono truncate';
     } else {
-      setOfflineState();
+      setOfflineState(`HTTP ${res.status}`);
     }
   } catch (err) {
-    setOfflineState();
+    setOfflineState('Offline');
   }
 }
 
-function setOfflineState() {
+function setOfflineState(statusText) {
   APP_STATE.isOnline = false;
   const dot = document.getElementById('connIndicator');
   const label = document.getElementById('connLabel');
-  dot.className = 'w-2 h-2 rounded-full bg-cyan-400';
-  label.innerHTML = `<span class="text-cyan-400 font-medium">Demo Mode</span>`;
+  if (dot && label) {
+    dot.className = 'w-2 h-2 rounded-full bg-rose-400';
+    label.textContent = `Backend ${statusText || 'Offline'}`;
+    label.className = 'text-[11px] text-rose-300 font-mono truncate';
+  }
 }
 
-/* -------------------------------------------------------------------------
-   Session & History Management
-   ------------------------------------------------------------------------- */
-function generateId() {
-  return 'conv-' + Math.random().toString(36).substring(2, 10);
-}
+/* ==========================================================================
+   4. Sessions & History Persistence
+   ========================================================================== */
+function initStorage() {
+  try {
+    const saved = localStorage.getItem('qs_sessions');
+    APP_STATE.sessions = saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    APP_STATE.sessions = [];
+  }
 
-function initSession() {
   if (APP_STATE.sessions.length === 0) {
-    startNewSession();
+    startNewSession(false);
   } else {
     loadSession(APP_STATE.sessions[0].id);
   }
   renderSessionHistory();
 }
 
-function startNewSession() {
-  const newId = generateId();
+function generateConversationId() {
+  return 'conv_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8);
+}
+
+function startNewSession(focusInput = true) {
+  const newId = generateConversationId();
   APP_STATE.currentConversationId = newId;
   APP_STATE.activeSessionMessages = [];
   APP_STATE.pendingClarification = false;
@@ -86,49 +118,75 @@ function startNewSession() {
   const newSession = {
     id: newId,
     title: 'New Query',
-    timestamp: Date.now(),
+    createdAt: Date.now(),
     messages: []
   };
+
   APP_STATE.sessions.unshift(newSession);
   saveSessions();
 
   renderSessionHistory();
   renderCurrentMessages();
-  document.getElementById('queryInput').focus();
+  updateSessionTitleHeader('New Query');
+  updateClarificationNotice(false);
+
+  if (focusInput) {
+    const input = document.getElementById('queryInput');
+    if (input) input.focus();
+  }
 }
 
 function loadSession(id) {
   const session = APP_STATE.sessions.find(s => s.id === id);
   if (!session) return;
+
   APP_STATE.currentConversationId = session.id;
   APP_STATE.activeSessionMessages = session.messages || [];
-  APP_STATE.pendingClarification = false;
+  APP_STATE.pendingClarification = Boolean(session.pendingClarification);
 
   renderSessionHistory();
   renderCurrentMessages();
-}
+  updateSessionTitleHeader(session.title || 'New Query');
+  updateClarificationNotice(APP_STATE.pendingClarification);
 
-function saveSessions() {
-  if (APP_STATE.sessions.length > 20) APP_STATE.sessions.pop();
-  localStorage.setItem('qm_sessions', JSON.stringify(APP_STATE.sessions));
-  document.getElementById('sessionCount').textContent = APP_STATE.sessions.length;
-}
-
-function updateSessionTitle(id, title) {
-  const session = APP_STATE.sessions.find(s => s.id === id);
-  if (session && session.title === 'New Query') {
-    session.title = title.length > 32 ? title.substring(0, 32) + '...' : title;
-    saveSessions();
-    renderSessionHistory();
+  // Close mobile sidebar drawer if open
+  if (window.innerWidth < 768) {
+    toggleSidebar(false);
   }
 }
 
+function saveSessions() {
+  if (APP_STATE.sessions.length > 30) {
+    APP_STATE.sessions = APP_STATE.sessions.slice(0, 30);
+  }
+  localStorage.setItem('qs_sessions', JSON.stringify(APP_STATE.sessions));
+
+  const countBadge = document.getElementById('sessionCount');
+  if (countBadge) countBadge.textContent = APP_STATE.sessions.length;
+}
+
+function updateSessionTitle(id, text) {
+  const session = APP_STATE.sessions.find(s => s.id === id);
+  if (session && (session.title === 'New Query' || !session.title)) {
+    session.title = text.length > 34 ? text.substring(0, 34).trim() + '...' : text;
+    saveSessions();
+    renderSessionHistory();
+    updateSessionTitleHeader(session.title);
+  }
+}
+
+function updateSessionTitleHeader(title) {
+  const el = document.getElementById('currentSessionTitle');
+  if (el) el.textContent = title;
+}
+
 function deleteSession(event, id) {
-  event.stopPropagation();
+  if (event) event.stopPropagation();
   APP_STATE.sessions = APP_STATE.sessions.filter(s => s.id !== id);
   saveSessions();
+
   if (APP_STATE.sessions.length === 0) {
-    startNewSession();
+    startNewSession(false);
   } else if (APP_STATE.currentConversationId === id) {
     loadSession(APP_STATE.sessions[0].id);
   } else {
@@ -136,197 +194,362 @@ function deleteSession(event, id) {
   }
 }
 
+function clearActiveThread() {
+  APP_STATE.activeSessionMessages = [];
+  APP_STATE.pendingClarification = false;
+
+  const current = APP_STATE.sessions.find(s => s.id === APP_STATE.currentConversationId);
+  if (current) {
+    current.messages = [];
+    current.pendingClarification = false;
+    current.title = 'New Query';
+    saveSessions();
+  }
+
+  renderSessionHistory();
+  renderCurrentMessages();
+  updateSessionTitleHeader('New Query');
+  updateClarificationNotice(false);
+}
+
+function filterSessions(query) {
+  const q = (query || '').toLowerCase().trim();
+  const list = document.getElementById('sessionHistoryList');
+  if (!list) return;
+
+  const items = list.querySelectorAll('.session-item');
+  items.forEach(item => {
+    const title = item.getAttribute('data-title') || '';
+    if (!q || title.toLowerCase().includes(q)) {
+      item.classList.remove('hidden');
+    } else {
+      item.classList.add('hidden');
+    }
+  });
+}
+
 function renderSessionHistory() {
   const list = document.getElementById('sessionHistoryList');
+  const empty = document.getElementById('emptySessionState');
+  if (!list) return;
+
   list.innerHTML = '';
+
+  if (APP_STATE.sessions.length === 0) {
+    if (empty) empty.classList.remove('hidden');
+    return;
+  }
+  if (empty) empty.classList.add('hidden');
 
   APP_STATE.sessions.forEach(session => {
     const isActive = session.id === APP_STATE.currentConversationId;
     const item = document.createElement('div');
-    item.className = `group flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer text-xs transition ${
-      isActive 
-        ? 'bg-brand-500/15 text-white font-medium border border-brand-500/30' 
+    item.className = `session-item group flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer text-xs transition select-none ${
+      isActive
+        ? 'bg-brand-600/20 text-white font-medium border border-brand-500/40'
         : 'text-slate-400 hover:bg-dark-800 hover:text-slate-200 border border-transparent'
     }`;
+    item.setAttribute('data-title', session.title || 'New Query');
     item.onclick = () => loadSession(session.id);
 
     item.innerHTML = `
-      <div class="flex items-center gap-2 truncate">
+      <div class="flex items-center gap-2 min-w-0 truncate">
         <i data-lucide="message-square" class="w-3.5 h-3.5 ${isActive ? 'text-brand-400' : 'text-slate-500'} flex-shrink-0"></i>
-        <span class="truncate">${escapeHtml(session.title)}</span>
+        <span class="truncate">${escapeHtml(session.title || 'New Query')}</span>
       </div>
-      <button onclick="deleteSession(event, '${session.id}')" class="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded transition">
+      <button
+        onclick="deleteSession(event, '${session.id}')"
+        class="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-1 rounded transition flex-shrink-0"
+        title="Delete session"
+      >
         <i data-lucide="trash-2" class="w-3 h-3"></i>
       </button>
     `;
+
     list.appendChild(item);
   });
 
-  document.getElementById('sessionCount').textContent = APP_STATE.sessions.length;
-  lucide.createIcons();
+  const countBadge = document.getElementById('sessionCount');
+  if (countBadge) countBadge.textContent = APP_STATE.sessions.length;
+
+  initIcons();
 }
 
-/* -------------------------------------------------------------------------
-   Query Execution & Response Handling
-   ------------------------------------------------------------------------- */
+/* ==========================================================================
+   5. Query Execution & API Communication
+   ========================================================================== */
 async function submitQuery() {
   if (APP_STATE.isExecuting) return;
+
   const input = document.getElementById('queryInput');
-  const question = input.value.trim();
-  if (!question) return;
+  const queryText = input ? input.value.trim() : '';
+  if (!queryText) return;
 
-  input.value = '';
-  autoResizeTextarea(input);
+  // If a clarification is currently pending, submit it as clarification answer
+  if (APP_STATE.pendingClarification) {
+    submitClarification(queryText);
+    if (input) {
+      input.value = '';
+      autoResizeTextarea(input);
+    }
+    return;
+  }
 
+  // Clear input
+  if (input) {
+    input.value = '';
+    autoResizeTextarea(input);
+  }
+
+  // Add User Message to thread
   const userMsg = {
     role: 'user',
-    text: question,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    text: queryText,
+    timestamp: formatTime(new Date())
   };
   addMessage(userMsg);
-  updateSessionTitle(APP_STATE.currentConversationId, question);
+  updateSessionTitle(APP_STATE.currentConversationId, queryText);
 
+  // Set loading state
   setExecuting(true);
 
   try {
-    if (APP_STATE.isOnline) {
-      const response = await fetch(`${APP_STATE.apiUrl}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: question,
-          conversation_id: APP_STATE.currentConversationId
-        })
-      });
+    const res = await fetch(`${APP_STATE.apiUrl}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: queryText,
+        conversation_id: APP_STATE.currentConversationId
+      })
+    });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || `Server error (${response.status})`);
-      }
-
-      const result = await response.json();
-      handleApiResponse(result, question);
-    } else {
-      // Demo response when backend is offline
-      await new Promise(r => setTimeout(r, 600));
-      const mockResult = generateMockAgentResponse(question);
-      handleApiResponse(mockResult, question);
+    if (!res.ok) {
+      const errPayload = await res.json().catch(() => ({}));
+      const errorMsg = errPayload.detail || `Server error (${res.status}: ${res.statusText})`;
+      throw new Error(errorMsg);
     }
+
+    const data = await res.json();
+    handleBackendSuccess(data);
   } catch (err) {
-    console.error('Execution error:', err);
+    console.error('[QuerySentinel] Request failed:', err);
     addMessage({
       role: 'error',
-      text: `Request failed: ${err.message}`,
-      timestamp: new Date().toLocaleTimeString()
+      text: err.message || 'Failed to connect to the backend server. Please verify FastAPI is running at ' + APP_STATE.apiUrl,
+      timestamp: formatTime(new Date())
     });
   } finally {
     setExecuting(false);
   }
 }
 
-async function submitClarification(clarificationText) {
-  if (APP_STATE.isExecuting || !clarificationText.trim()) return;
+async function submitClarification(answerText) {
+  if (APP_STATE.isExecuting || !answerText || !answerText.trim()) return;
 
-  const userMsg = {
+  const cleanText = answerText.trim();
+
+  // Add user clarification message
+  addMessage({
     role: 'user',
-    text: clarificationText,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  };
-  addMessage(userMsg);
+    text: cleanText,
+    isClarificationReply: true,
+    timestamp: formatTime(new Date())
+  });
+
   setExecuting(true);
+  updateClarificationNotice(false);
 
   try {
-    if (APP_STATE.isOnline) {
-      const response = await fetch(`${APP_STATE.apiUrl}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clarification_answer: clarificationText,
-          conversation_id: APP_STATE.currentConversationId
-        })
-      });
+    const res = await fetch(`${APP_STATE.apiUrl}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        clarification_answer: cleanText,
+        conversation_id: APP_STATE.currentConversationId
+      })
+    });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.detail || `Resume failed (${response.status})`);
-      }
-
-      const result = await response.json();
-      handleApiResponse(result, clarificationText);
-    } else {
-      await new Promise(r => setTimeout(r, 600));
-      const simulatedResumeResult = {
-        answer: `Filtered results using clarification: "${clarificationText}". Total 34 patients matched.`,
-        sql: `SELECT p.patient_id, p.full_name, p.age, d.name AS department, p.admission_date\nFROM patients p\nJOIN departments d ON p.department_id = d.department_id\nWHERE LOWER(d.name) = 'cardiology'\nORDER BY p.admission_date DESC\nLIMIT 10;`,
-        results: [
-          { patient_id: 104, full_name: "Sarah Miller", age: 54, department: "Cardiology", admission_date: "2025-08-14" },
-          { patient_id: 189, full_name: "James Wilson", age: 67, department: "Cardiology", admission_date: "2025-09-02" },
-          { patient_id: 201, full_name: "Fatima Noor", age: 43, department: "Cardiology", admission_date: "2025-09-18" },
-          { patient_id: 233, full_name: "David Chen", age: 61, department: "Cardiology", admission_date: "2025-10-01" }
-        ],
-        cache_hit: false,
-        latency_ms: 380,
-      };
-      handleApiResponse(simulatedResumeResult, clarificationText);
+    if (!res.ok) {
+      const errPayload = await res.json().catch(() => ({}));
+      const errorMsg = errPayload.detail || `Clarification resume failed (${res.status})`;
+      throw new Error(errorMsg);
     }
+
+    const data = await res.json();
+    APP_STATE.pendingClarification = false;
+    handleBackendSuccess(data);
   } catch (err) {
+    console.error('[QuerySentinel] Clarification error:', err);
     addMessage({
       role: 'error',
-      text: `Failed to resume: ${err.message}`,
-      timestamp: new Date().toLocaleTimeString()
+      text: `Clarification failed: ${err.message}`,
+      timestamp: formatTime(new Date())
     });
   } finally {
     setExecuting(false);
   }
 }
 
-function handleApiResponse(data, originalQuery) {
-  // Clarification request
+function handleBackendSuccess(data) {
+  // Case 1: Clarification needed
   if (data && data.requires_clarification) {
     APP_STATE.pendingClarification = true;
+    updateClarificationNotice(true);
     addMessage({
       role: 'clarification',
       question: data.clarification_question || 'Additional clarification required to form an exact query.',
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: formatTime(new Date())
     });
     return;
   }
 
-  // Plain string answer (FastAPI default)
+  APP_STATE.pendingClarification = false;
+  updateClarificationNotice(false);
+
+  // Case 2: Plain string answer (FastAPI default)
   if (typeof data === 'string') {
+    const parsed = parseRawAnswerString(data);
     addMessage({
       role: 'assistant',
-      answer: data,
-      sql: extractSqlFromString(data) || null,
-      results: null,
-      cache_hit: false,
-      latency_ms: null,
-      timestamp: new Date().toLocaleTimeString()
+      answer: parsed.answer,
+      sql: parsed.sql,
+      results: parsed.results,
+      isSecurityRejection: parsed.isSecurityRejection,
+      isQueryError: parsed.isQueryError,
+      timestamp: formatTime(new Date())
     });
     return;
   }
 
-  // Structured response object
-  addMessage({
-    role: 'assistant',
-    answer: data.answer || 'Query completed successfully.',
-    sql: data.sql || null,
-    results: data.results || (data.db_result ? formatDbResult(data.db_result) : null),
-    cache_hit: Boolean(data.cache_hit),
-    latency_ms: data.latency_ms || null,
-    timestamp: new Date().toLocaleTimeString()
+  // Case 3: Structured object response
+  if (data && typeof data === 'object') {
+    const rawAnswer = data.answer || '';
+    const parsed = parseRawAnswerString(rawAnswer);
+
+    addMessage({
+      role: 'assistant',
+      answer: parsed.answer || 'Query completed successfully.',
+      sql: data.sql || parsed.sql || null,
+      results: data.results || (data.db_result ? formatDbTuples(data.db_result) : parsed.results) || null,
+      isSecurityRejection: Boolean(data.permission_denied || !data.input_safe || parsed.isSecurityRejection),
+      isQueryError: Boolean(data.sql_execution_error || parsed.isQueryError),
+      timestamp: formatTime(new Date())
+    });
+  }
+}
+
+/* ==========================================================================
+   6. Parsing & Content Extraction
+   ========================================================================== */
+function parseRawAnswerString(rawText) {
+  if (!rawText) {
+    return {
+      answer: 'No answer generated.',
+      sql: null,
+      results: null,
+      isSecurityRejection: false,
+      isQueryError: false
+    };
+  }
+
+  // Detect security policy rejections
+  const isSecurityRejection = 
+    rawText.includes('violates safety guidelines') ||
+    rawText.includes('SQL security is in charge') ||
+    rawText.includes('flagged as unsafe') ||
+    rawText.includes('do not have permission') ||
+    rawText.includes('contain sensitive information');
+
+  // Detect query execution errors
+  const isQueryError = rawText.includes('The query could not be executed:');
+
+  let workingText = rawText;
+  let extractedSql = null;
+  let extractedResults = null;
+
+  // 1. Extract markdown SQL block: ```sql ... ```
+  const sqlFenceMatch = workingText.match(/```(?:sql)?\s*([\s\S]*?SELECT[\s\S]*?)```/i);
+  if (sqlFenceMatch) {
+    extractedSql = sqlFenceMatch[1].trim();
+    // Remove the SQL fence from the natural language answer
+    workingText = workingText.replace(sqlFenceMatch[0], '').trim();
+  } else {
+    // Check for inline SELECT ... ;
+    const rawSqlMatch = workingText.match(/\b(SELECT\s+[\s\S]+?;)/i);
+    if (rawSqlMatch && rawSqlMatch[1].length > 15) {
+      extractedSql = rawSqlMatch[1].trim();
+    }
+  }
+
+  // 2. Extract markdown table: | Col1 | Col2 | ...
+  const tableMatch = workingText.match(/(\|[^\n]+\|\r?\n\|[-:\s|]+\|\r?\n(?:\|[^\n]+\|\r?\n?)+)/);
+  if (tableMatch) {
+    extractedResults = parseMarkdownTable(tableMatch[1]);
+  }
+
+  return {
+    answer: workingText,
+    sql: extractedSql,
+    results: extractedResults,
+    isSecurityRejection,
+    isQueryError
+  };
+}
+
+function parseMarkdownTable(tableString) {
+  try {
+    const lines = tableString.trim().split(/\r?\n/).filter(l => l.includes('|'));
+    if (lines.length < 3) return null;
+
+    const parseRow = line => line.split('|').slice(1, -1).map(c => c.trim());
+    const headers = parseRow(lines[0]);
+    const rows = [];
+
+    for (let i = 2; i < lines.length; i++) {
+      const values = parseRow(lines[i]);
+      if (values.length === headers.length) {
+        const rowObj = {};
+        headers.forEach((h, idx) => {
+          rowObj[h] = values[idx];
+        });
+        rows.push(rowObj);
+      }
+    }
+
+    return rows.length > 0 ? rows : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function formatDbTuples(tuples) {
+  if (!Array.isArray(tuples) || tuples.length === 0) return null;
+  return tuples.map((tuple, idx) => {
+    if (Array.isArray(tuple)) {
+      const row = {};
+      tuple.forEach((val, colIdx) => {
+        row[`column_${colIdx + 1}`] = val;
+      });
+      return row;
+    }
+    return { row_id: idx + 1, value: String(tuple) };
   });
 }
 
-/* -------------------------------------------------------------------------
-   Render Messages & Views
-   ------------------------------------------------------------------------- */
+/* ==========================================================================
+   7. Rendering Messages & Thread Management
+   ========================================================================== */
 function addMessage(msg) {
   APP_STATE.activeSessionMessages.push(msg);
 
   const current = APP_STATE.sessions.find(s => s.id === APP_STATE.currentConversationId);
   if (current) {
     current.messages = APP_STATE.activeSessionMessages;
+    current.pendingClarification = APP_STATE.pendingClarification;
     saveSessions();
   }
 
@@ -336,40 +559,46 @@ function addMessage(msg) {
 function renderCurrentMessages() {
   const hero = document.getElementById('welcomeHero');
   const container = document.getElementById('threadContainer');
+  if (!container) return;
 
   if (APP_STATE.activeSessionMessages.length === 0) {
-    hero.classList.remove('hidden');
+    if (hero) hero.classList.remove('hidden');
     container.innerHTML = '';
     return;
   }
 
-  hero.classList.add('hidden');
+  if (hero) hero.classList.add('hidden');
   container.innerHTML = '';
 
   APP_STATE.activeSessionMessages.forEach((msg, idx) => {
-    const msgNode = createMessageElement(msg, idx);
-    container.appendChild(msgNode);
+    const node = createMessageNode(msg, idx);
+    container.appendChild(node);
   });
 
+  // Scroll to bottom smoothly
   const scrollArea = document.getElementById('messagesContainer');
-  scrollArea.scrollTop = scrollArea.scrollHeight;
-  lucide.createIcons();
+  if (scrollArea) {
+    scrollArea.scrollTop = scrollArea.scrollHeight;
+  }
+
+  initIcons();
 }
 
-function createMessageElement(msg, index) {
+function createMessageNode(msg, index) {
   const wrap = document.createElement('div');
-  wrap.className = 'w-full animate-fade-in';
+  wrap.className = 'w-full fade-in';
 
+  // --- USER MESSAGE ---
   if (msg.role === 'user') {
     wrap.innerHTML = `
-      <div class="flex justify-end items-start gap-3 pl-12">
-        <div class="space-y-1 text-right">
-          <div class="inline-block bg-gradient-to-r from-brand-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm shadow-md shadow-brand-500/10 leading-relaxed max-w-xl text-left">
+      <div class="flex justify-end items-start gap-2.5 pl-8 md:pl-16">
+        <div class="space-y-1 text-right max-w-xl">
+          <div class="inline-block bg-dark-800 border border-white/[0.08] text-slate-100 rounded-xl rounded-tr-xs px-3.5 py-2 text-xs sm:text-sm text-left leading-relaxed shadow-sm">
             ${escapeHtml(msg.text)}
           </div>
-          <div class="text-[10px] text-slate-500 pr-1">${msg.timestamp || ''}</div>
+          <div class="text-[10px] text-slate-500 font-mono pr-1">${msg.timestamp || ''}</div>
         </div>
-        <div class="w-7 h-7 rounded-lg bg-dark-800 border border-white/[0.08] flex items-center justify-center text-slate-400 flex-shrink-0 mt-0.5">
+        <div class="w-6 h-6 rounded-md bg-dark-750 border border-white/[0.08] flex items-center justify-center text-slate-300 flex-shrink-0 mt-0.5">
           <i data-lucide="user" class="w-3.5 h-3.5"></i>
         </div>
       </div>
@@ -377,48 +606,41 @@ function createMessageElement(msg, index) {
     return wrap;
   }
 
+  // --- CLARIFICATION CARD ---
   if (msg.role === 'clarification') {
     wrap.innerHTML = `
-      <div class="flex items-start gap-3 pr-12">
-        <div class="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0 mt-0.5">
+      <div class="flex items-start gap-2.5 pr-4 md:pr-12">
+        <div class="w-6 h-6 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0 mt-0.5">
           <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
         </div>
-        <div class="flex-1 max-w-2xl bg-amber-500/[0.06] border border-amber-500/30 rounded-2xl p-4 space-y-3 shadow-lg shadow-amber-500/5">
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Clarification Needed
+        <div class="flex-1 max-w-2xl bg-dark-850 border border-amber-500/30 rounded-xl p-3.5 space-y-3 shadow-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-amber-400 font-mono">
+              Clarification Requested
             </span>
+            <span class="text-[10px] text-slate-500 font-mono">${msg.timestamp || ''}</span>
           </div>
-          <p class="text-sm text-slate-200 leading-relaxed font-medium">
+
+          <p class="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
             ${escapeHtml(msg.question)}
           </p>
 
-          <div class="space-y-2 pt-1">
-            <div class="flex gap-2">
+          <div class="pt-1 space-y-2">
+            <div class="flex items-center gap-2">
               <input
                 type="text"
                 id="clarify-input-${index}"
-                placeholder="Type your clarification..."
-                class="flex-1 px-3 py-2 rounded-xl bg-dark-900 border border-amber-500/30 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400"
+                placeholder="Type clarification to resume..."
+                class="flex-1 px-3 py-1.5 rounded-lg bg-dark-950 border border-white/[0.08] text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400/80 transition"
                 onkeydown="if(event.key==='Enter') submitClarification(this.value)"
               />
               <button
                 onclick="submitClarification(document.getElementById('clarify-input-${index}').value)"
-                class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-dark-950 font-semibold text-xs transition"
+                class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-semibold text-xs transition"
               >
                 Continue
               </button>
             </div>
-
-            <div class="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 pt-1">
-              <span class="text-slate-500">Quick options:</span>
-              <button onclick="submitClarification('Count patients by admission dates')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
-                "By admission dates"
-              </button>
-              <button onclick="submitClarification('Count patients by appointment consultation dates')" class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-white/[0.06]">
-                "By consultation dates"
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -426,132 +648,164 @@ function createMessageElement(msg, index) {
     return wrap;
   }
 
+  // --- SYSTEM / REQUEST ERROR ---
   if (msg.role === 'error') {
     wrap.innerHTML = `
-      <div class="flex items-start gap-3 pr-12">
-        <div class="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0 mt-0.5">
+      <div class="flex items-start gap-2.5 pr-4 md:pr-12">
+        <div class="w-6 h-6 rounded-md bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0 mt-0.5">
           <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i>
         </div>
-        <div class="bg-rose-500/[0.07] border border-rose-500/30 rounded-2xl p-4 text-xs text-rose-300 space-y-1">
-          <div class="font-semibold">Notice</div>
-          <p class="leading-relaxed">${escapeHtml(msg.text)}</p>
+        <div class="flex-1 max-w-2xl bg-dark-850 border border-rose-500/30 rounded-xl p-3.5 space-y-1.5 text-xs shadow-sm">
+          <div class="flex items-center justify-between text-rose-400 font-semibold">
+            <span>Query Notice</span>
+            <span class="text-[10px] text-slate-500 font-mono font-normal">${msg.timestamp || ''}</span>
+          </div>
+          <p class="text-slate-300 leading-relaxed">${escapeHtml(msg.text)}</p>
         </div>
       </div>
     `;
     return wrap;
   }
 
-  // Assistant Response Card
+  // --- ASSISTANT MESSAGE CARD ---
   const hasSql = Boolean(msg.sql);
-  const hasResults = msg.results && msg.results.length > 0;
-  const canChart = hasResults && detectChartableData(msg.results);
+  const hasResults = Boolean(msg.results && msg.results.length > 0);
+  const showTabs = hasSql || hasResults;
 
   wrap.innerHTML = `
-    <div class="flex items-start gap-3 pr-4 md:pr-12">
-      <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-brand-500 to-cyan-500 flex items-center justify-center text-white flex-shrink-0 mt-0.5 shadow-md shadow-brand-500/20">
+    <div class="flex items-start gap-2.5 pr-2 md:pr-12">
+      <!-- Bot Avatar -->
+      <div class="w-6 h-6 rounded-md bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-brand-400 flex-shrink-0 mt-0.5">
         <i data-lucide="bot" class="w-3.5 h-3.5"></i>
       </div>
 
-      <div class="flex-1 space-y-3 max-w-2xl">
-        <div class="glass-panel bg-dark-850/90 border border-white/[0.08] rounded-2xl p-4 space-y-3 shadow-xl">
-          <div class="flex items-center justify-between border-b border-white/[0.06] pb-2">
-            <div class="flex items-center gap-2">
-              ${msg.cache_hit 
-                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                     Cache HIT
-                   </span>`
-                : ''
-              }
-              ${msg.latency_ms ? `
-                <span class="text-[10px] text-slate-500 font-mono">
-                  ${msg.latency_ms}ms
-                </span>
-              ` : ''}
+      <div class="flex-1 max-w-2xl space-y-2 min-w-0">
+        
+        <!-- Main Card Container -->
+        <div class="bg-dark-850 border border-white/[0.08] rounded-xl overflow-hidden shadow-sm">
+          
+          <!-- Card Header & Tab Bar -->
+          <div class="flex items-center justify-between border-b border-white/[0.06] bg-dark-900/60 px-3 py-1.5">
+            <div class="flex items-center gap-1">
+              ${showTabs ? `
+                <button
+                  onclick="switchTab(${index}, 'answer')"
+                  id="tab-btn-answer-${index}"
+                  class="px-2.5 py-1 text-xs font-medium text-brand-400 border-b-2 border-brand-500 transition flex items-center gap-1.5"
+                >
+                  <i data-lucide="message-square" class="w-3 h-3"></i> Answer
+                </button>
+
+                ${hasSql ? `
+                  <button
+                    onclick="switchTab(${index}, 'sql')"
+                    id="tab-btn-sql-${index}"
+                    class="px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center gap-1.5"
+                  >
+                    <i data-lucide="terminal" class="w-3 h-3"></i> SQL
+                  </button>
+                ` : ''}
+
+                ${hasResults ? `
+                  <button
+                    onclick="switchTab(${index}, 'results')"
+                    id="tab-btn-results-${index}"
+                    class="px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center gap-1.5"
+                  >
+                    <i data-lucide="table" class="w-3 h-3"></i> Results (${msg.results.length})
+                  </button>
+                ` : ''}
+              ` : `
+                <div class="flex items-center gap-1.5 text-xs text-slate-400">
+                  <i data-lucide="shield" class="w-3 h-3 text-brand-400"></i>
+                  <span class="font-medium text-slate-300">Query Sentinel</span>
+                </div>
+              `}
             </div>
 
-            <div class="text-[10px] text-slate-500 font-mono">${msg.timestamp || ''}</div>
+            <!-- Header Actions -->
+            <div class="flex items-center gap-1.5">
+              ${msg.isSecurityRejection ? `
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-dark-800 text-slate-300 border border-white/[0.08]">
+                  Security Guardrail
+                </span>
+              ` : ''}
+
+              <!-- Copy Answer Button -->
+              <button
+                onclick="copyAnswerText(${index}, this)"
+                class="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-slate-200 hover:bg-dark-800 transition flex items-center gap-1"
+                title="Copy response to clipboard"
+              >
+                <i data-lucide="copy" class="w-3 h-3"></i>
+                <span class="copy-label">Copy</span>
+              </button>
+
+              <span class="text-[10px] text-slate-500 font-mono pl-1">${msg.timestamp || ''}</span>
+            </div>
           </div>
 
-          <div class="text-sm text-slate-200 leading-relaxed font-sans">
-            ${formatMarkdownAnswer(msg.answer)}
+          <!-- Card Content Body -->
+          <div class="p-3.5">
+            
+            <!-- Pane 1: Answer -->
+            <div id="tab-pane-answer-${index}" class="block prose-content">
+              ${renderMarkdownContent(msg.answer)}
+            </div>
+
+            <!-- Pane 2: SQL Panel -->
+            ${hasSql ? `
+              <div id="tab-pane-sql-${index}" class="hidden space-y-2">
+                <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
+                  <span class="font-mono text-[11px] text-slate-400">Generated PostgreSQL Query</span>
+                  <button
+                    onclick="copySqlText(${index}, this)"
+                    class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 border border-white/[0.08] text-[11px] text-slate-300 transition flex items-center gap-1"
+                  >
+                    <i data-lucide="copy" class="w-3 h-3"></i> Copy SQL
+                  </button>
+                </div>
+                <div class="sql-console p-3 overflow-x-auto text-xs text-slate-200 leading-relaxed">
+                  <code>${highlightSql(msg.sql)}</code>
+                </div>
+              </div>
+            ` : ''}
+
+            <!-- Pane 3: Results Table -->
+            ${hasResults ? `
+              <div id="tab-pane-results-${index}" class="hidden space-y-2">
+                <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
+                  <span class="font-mono text-[11px]">${msg.results.length} record(s) returned</span>
+                  <button
+                    onclick="downloadCsv(${index})"
+                    class="px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 border border-white/[0.08] text-[11px] text-slate-300 transition flex items-center gap-1"
+                  >
+                    <i data-lucide="download" class="w-3 h-3"></i> Export CSV
+                  </button>
+                </div>
+
+                <div class="data-table-wrapper max-h-64 overflow-x-auto">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        ${Object.keys(msg.results[0]).map(col => `<th>${escapeHtml(col)}</th>`).join('')}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${msg.results.map(row => `
+                        <tr>
+                          ${Object.values(row).map(val => `<td>${escapeHtml(String(val ?? ''))}</td>`).join('')}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : ''}
+
           </div>
         </div>
 
-        ${(hasSql || hasResults) ? `
-          <div class="border border-white/[0.08] bg-dark-900 rounded-2xl overflow-hidden shadow-xl">
-            <div class="flex items-center justify-between border-b border-white/[0.06] bg-dark-850/60 px-3">
-              <div class="flex items-center gap-1">
-                ${hasSql ? `
-                  <button onclick="switchTab(${index}, 'sql')" id="tab-btn-sql-${index}" class="px-3 py-2 text-xs font-semibold text-brand-400 border-b-2 border-brand-500 flex items-center gap-1.5 transition">
-                    <i data-lucide="terminal" class="w-3.5 h-3.5"></i> SQL
-                  </button>
-                ` : ''}
-                ${hasResults ? `
-                  <button onclick="switchTab(${index}, 'table')" id="tab-btn-table-${index}" class="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition">
-                    <i data-lucide="table" class="w-3.5 h-3.5"></i> Results (${msg.results.length})
-                  </button>
-                ` : ''}
-                ${canChart ? `
-                  <button onclick="switchTab(${index}, 'chart')" id="tab-btn-chart-${index}" class="px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition">
-                    <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Chart
-                  </button>
-                ` : ''}
-              </div>
-
-              <div class="flex items-center gap-1">
-                ${hasSql ? `
-                  <button onclick="copyToClipboard('${encodeURIComponent(msg.sql)}', this)" class="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white hover:bg-dark-800 transition flex items-center gap-1">
-                    <i data-lucide="copy" class="w-3 h-3"></i> Copy
-                  </button>
-                ` : ''}
-                ${hasResults ? `
-                  <button onclick="exportCsv(${index})" class="px-2 py-1 rounded text-[11px] text-slate-400 hover:text-white hover:bg-dark-800 transition flex items-center gap-1">
-                    <i data-lucide="download" class="w-3 h-3"></i> CSV
-                  </button>
-                ` : ''}
-              </div>
-            </div>
-
-            <div class="p-3">
-              ${hasSql ? `
-                <div id="tab-pane-sql-${index}" class="block">
-                  <div class="p-3 bg-dark-950 rounded-xl border border-white/[0.04] overflow-x-auto font-mono text-xs leading-relaxed text-slate-300">
-                    ${highlightSql(msg.sql)}
-                  </div>
-                </div>
-              ` : ''}
-
-              ${hasResults ? `
-                <div id="tab-pane-table-${index}" class="${hasSql ? 'hidden' : 'block'} space-y-2">
-                  <div class="overflow-x-auto rounded-xl border border-white/[0.06] max-h-72">
-                    <table class="w-full text-left text-xs text-slate-300">
-                      <thead class="bg-dark-800 text-slate-400 uppercase text-[10px] font-semibold sticky top-0 border-b border-white/[0.06]">
-                        <tr>
-                          ${Object.keys(msg.results[0]).map(col => `<th class="px-3 py-2.5 font-mono">${escapeHtml(col)}</th>`).join('')}
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-white/[0.04] bg-dark-950/60 font-mono text-[11px]">
-                        ${msg.results.map(row => `
-                          <tr class="hover:bg-dark-800/40 transition">
-                            ${Object.values(row).map(val => `<td class="px-3 py-2 whitespace-nowrap text-slate-300">${escapeHtml(String(val ?? ''))}</td>`).join('')}
-                          </tr>
-                        `).join('')}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ` : ''}
-
-              ${canChart ? `
-                <div id="tab-pane-chart-${index}" class="hidden p-2">
-                  <div class="h-64 relative">
-                    <canvas id="chart-canvas-${index}"></canvas>
-                  </div>
-                </div>
-              ` : ''}
-            </div>
-          </div>
-        ` : ''}
       </div>
     </div>
   `;
@@ -559,171 +813,165 @@ function createMessageElement(msg, index) {
   return wrap;
 }
 
-/* -------------------------------------------------------------------------
-   Tab Switching & Auto-Charting (Chart.js)
-   ------------------------------------------------------------------------- */
-function switchTab(index, tabName) {
-  const tabs = ['sql', 'table', 'chart'];
-  tabs.forEach(t => {
-    const btn = document.getElementById(`tab-btn-${t}-${index}`);
-    const pane = document.getElementById(`tab-pane-${t}-${index}`);
-    if (!btn || !pane) return;
+/* ==========================================================================
+   8. Tab Controls & Utilities
+   ========================================================================== */
+function switchTab(index, targetTab) {
+  const tabs = ['answer', 'sql', 'results'];
 
-    if (t === tabName) {
-      btn.className = 'px-3 py-2 text-xs font-semibold text-brand-400 border-b-2 border-brand-500 flex items-center gap-1.5 transition';
-      pane.classList.remove('hidden');
-      pane.classList.add('block');
-    } else {
-      btn.className = 'px-3 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent flex items-center gap-1.5 transition';
-      pane.classList.remove('block');
-      pane.classList.add('hidden');
-    }
-  });
+  tabs.forEach(tab => {
+    const btn = document.getElementById(`tab-btn-${tab}-${index}`);
+    const pane = document.getElementById(`tab-pane-${tab}-${index}`);
 
-  if (tabName === 'chart') {
-    const msg = APP_STATE.activeSessionMessages[index];
-    if (msg && msg.results) {
-      renderChartForMessage(index, msg.results);
-    }
-  }
-}
-
-function detectChartableData(results) {
-  if (!results || results.length < 2) return false;
-  const sample = results[0];
-  const keys = Object.keys(sample);
-  const hasNumeric = keys.some(k => typeof sample[k] === 'number');
-  const hasCategorical = keys.some(k => typeof sample[k] === 'string');
-  return hasNumeric && hasCategorical;
-}
-
-function renderChartForMessage(index, results) {
-  const canvas = document.getElementById(`chart-canvas-${index}`);
-  if (!canvas) return;
-
-  if (APP_STATE.chartInstances[index]) {
-    APP_STATE.chartInstances[index].destroy();
-  }
-
-  const keys = Object.keys(results[0]);
-  const labelKey = keys.find(k => typeof results[0][k] === 'string') || keys[0];
-  const dataKey = keys.find(k => typeof results[0][k] === 'number') || keys[1];
-
-  const labels = results.map(r => r[labelKey]);
-  const dataValues = results.map(r => r[dataKey]);
-
-  const ctx = canvas.getContext('2d');
-  APP_STATE.chartInstances[index] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: dataKey.replace(/_/g, ' ').toUpperCase(),
-        data: dataValues,
-        backgroundColor: 'rgba(99, 102, 241, 0.65)',
-        borderColor: '#818cf8',
-        borderWidth: 1.5,
-        borderRadius: 6,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: '#94a3b8', font: { family: 'Inter', size: 10 } },
-          grid: { color: 'rgba(255, 255, 255, 0.05)' }
-        },
-        y: {
-          ticks: { color: '#94a3b8', font: { family: 'Inter', size: 10 } },
-          grid: { color: 'rgba(255, 255, 255, 0.05)' }
-        }
+    if (btn && pane) {
+      if (tab === targetTab) {
+        btn.className = 'px-2.5 py-1 text-xs font-medium text-brand-400 border-b-2 border-brand-500 transition flex items-center gap-1.5';
+        pane.classList.remove('hidden');
+        pane.classList.add('block');
+      } else {
+        btn.className = 'px-2.5 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition flex items-center gap-1.5';
+        pane.classList.remove('block');
+        pane.classList.add('hidden');
       }
     }
   });
+
+  initIcons();
 }
 
-/* -------------------------------------------------------------------------
-   CSV & Clipboard Utilities
-   ------------------------------------------------------------------------- */
-function exportCsv(index) {
+function copyAnswerText(index, btn) {
+  const msg = APP_STATE.activeSessionMessages[index];
+  if (!msg) return;
+
+  navigator.clipboard.writeText(msg.answer).then(() => {
+    const label = btn.querySelector('.copy-label');
+    if (label) label.textContent = 'Copied!';
+    setTimeout(() => {
+      if (label) label.textContent = 'Copy';
+    }, 1800);
+  });
+}
+
+function copySqlText(index, btn) {
+  const msg = APP_STATE.activeSessionMessages[index];
+  if (!msg || !msg.sql) return;
+
+  navigator.clipboard.writeText(msg.sql).then(() => {
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i> Copied!`;
+    initIcons();
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+      initIcons();
+    }, 1800);
+  });
+}
+
+function downloadCsv(index) {
   const msg = APP_STATE.activeSessionMessages[index];
   if (!msg || !msg.results || msg.results.length === 0) return;
 
-  const keys = Object.keys(msg.results[0]);
-  const rows = [keys.join(',')];
+  const headers = Object.keys(msg.results[0]);
+  const rows = [headers.join(',')];
 
   msg.results.forEach(row => {
-    const values = keys.map(k => {
-      let val = String(row[k] ?? '').replace(/"/g, '""');
-      return `"${val}"`;
+    const vals = headers.map(h => {
+      let v = String(row[h] ?? '').replace(/"/g, '""');
+      return `"${v}"`;
     });
-    rows.push(values.join(','));
+    rows.push(vals.join(','));
   });
 
-  const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.join('\n'));
-  const link = document.createElement('a');
-  link.setAttribute('href', csvContent);
-  link.setAttribute('download', `query_results_${Date.now()}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `query_sentinel_results_${Date.now()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
-function copyToClipboard(encoded, btn) {
-  const text = decodeURIComponent(encoded);
-  navigator.clipboard.writeText(text);
-  const originalText = btn.innerHTML;
-  btn.innerHTML = `<i data-lucide="check" class="w-3 h-3 text-emerald-400"></i> Copied!`;
-  lucide.createIcons();
-  setTimeout(() => {
-    btn.innerHTML = originalText;
-    lucide.createIcons();
-  }, 2000);
-}
-
-/* -------------------------------------------------------------------------
-   SQL Syntax Highlighter
-   ------------------------------------------------------------------------- */
+/* ==========================================================================
+   9. SQL Syntax Highlighting & Markdown
+   ========================================================================== */
 function highlightSql(rawSql) {
   if (!rawSql) return '';
-  let s = escapeHtml(rawSql);
+  let s = escapeHtml(rawSql.trim());
 
-  const keywords = [
-    'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 
-    'FULL OUTER JOIN', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'OFFSET',
-    'AS', 'AND', 'OR', 'NOT', 'IN', 'IS NULL', 'IS NOT NULL', 'BETWEEN', 'LIKE',
-    'UNION', 'ALL', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'ASC', 'DESC'
+  // 1. Comments: -- ...
+  s = s.replace(/(--[^\n]*)/g, `<span class="sql-token-cmt">$1</span>`);
+
+  // 2. Strings: '...'
+  s = s.replace(/'([^']*)'/g, `<span class="sql-token-str">'$1'</span>`);
+
+  // 3. Numbers
+  s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, `<span class="sql-token-num">$1</span>`);
+
+  // 4. Functions
+  const functions = [
+    'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'ROUND', 'COALESCE', 'DATE_PART',
+    'EXTRACT', 'NOW', 'LOWER', 'UPPER', 'CONCAT', 'CAST', 'SUBSTRING'
   ];
-
-  keywords.forEach(kw => {
-    const reg = new RegExp(`\\b${kw}\\b`, 'gi');
-    s = s.replace(reg, m => `<span class="sql-kw">${m.toUpperCase()}</span>`);
-  });
-
-  const functions = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'DATE_PART', 'EXTRACT', 'ROUND', 'COALESCE', 'LOWER', 'UPPER', 'NOW'];
   functions.forEach(fn => {
-    const reg = new RegExp(`\\b${fn}\\b(?=\\s*\\()`, 'gi');
-    s = s.replace(reg, m => `<span class="sql-fn">${m.toUpperCase()}</span>`);
+    const regex = new RegExp(`\\b(${fn})\\b(?=\\s*\\()`, 'gi');
+    s = s.replace(regex, `<span class="sql-token-fn">$1</span>`);
   });
 
-  s = s.replace(/'([^']*)'/g, `<span class="sql-str">'$1'</span>`);
-  s = s.replace(/\b(\d+)\b/g, `<span class="sql-num">$1</span>`);
+  // 5. Keywords
+  const keywords = [
+    'SELECT', 'FROM', 'WHERE', 'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
+    'FULL JOIN', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT', 'OFFSET',
+    'AS', 'AND', 'OR', 'NOT', 'IN', 'IS NULL', 'IS NOT NULL', 'BETWEEN',
+    'LIKE', 'ILIKE', 'UNION', 'ALL', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END',
+    'ASC', 'DESC', 'DISTINCT', 'EXISTS'
+  ];
+  keywords.forEach(kw => {
+    const regex = new RegExp(`\\b(${kw})\\b`, 'gi');
+    s = s.replace(regex, `<span class="sql-token-kw">$1</span>`);
+  });
 
   return s;
 }
 
-function formatMarkdownAnswer(text) {
+function renderMarkdownContent(text) {
   if (!text) return '';
-  let escaped = escapeHtml(text);
-  escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
-  escaped = escaped.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-dark-800 text-brand-300 font-mono text-xs">$1</code>');
-  return escaped;
+
+  let html = escapeHtml(text);
+
+  // Bold: **text**
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  // Inline code: `code`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Bullet points
+  const lines = html.split('\n');
+  let inList = false;
+  let formatted = [];
+
+  for (let line of lines) {
+    const bulletMatch = line.match(/^\s*[-*]\s+(.*)/);
+    if (bulletMatch) {
+      if (!inList) {
+        formatted.push('<ul>');
+        inList = true;
+      }
+      formatted.push(`<li>${bulletMatch[1]}</li>`);
+    } else {
+      if (inList) {
+        formatted.push('</ul>');
+        inList = false;
+      }
+      if (line.trim().length > 0) {
+        formatted.push(`<p>${line}</p>`);
+      }
+    }
+  }
+
+  if (inList) formatted.push('</ul>');
+
+  return formatted.join('\n');
 }
 
 function escapeHtml(str) {
@@ -735,51 +983,22 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-function extractSqlFromString(str) {
-  const match = str.match(/SELECT[\s\S]*?;/i);
-  return match ? match[0] : null;
+function formatTime(date) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDbResult(tuples) {
-  if (!Array.isArray(tuples) || tuples.length === 0) return null;
-  return tuples.map((t, idx) => ({
-    row_id: idx + 1,
-    result: String(t)
-  }));
-}
-
-function usePrompt(text) {
+/* ==========================================================================
+   10. User Input & Starter Prompts
+   ========================================================================== */
+function selectPrompt(promptText) {
   const input = document.getElementById('queryInput');
-  input.value = text;
-  input.focus();
+  if (!input) return;
+
+  input.value = promptText;
   autoResizeTextarea(input);
+  submitQuery();
 }
 
-/* -------------------------------------------------------------------------
-   Settings
-   ------------------------------------------------------------------------- */
-function toggleSettingsModal() {
-  const modal = document.getElementById('settingsModal');
-  modal.classList.toggle('hidden');
-}
-
-function saveSettings() {
-  const url = document.getElementById('apiUrlInput').value.trim();
-  const demo = document.getElementById('demoFallbackToggle').checked;
-
-  APP_STATE.apiUrl = url || 'http://127.0.0.1:8000';
-  APP_STATE.demoFallback = demo;
-
-  localStorage.setItem('qm_api_url', APP_STATE.apiUrl);
-  localStorage.setItem('qm_demo_fallback', demo);
-
-  toggleSettingsModal();
-  checkBackendHealth();
-}
-
-/* -------------------------------------------------------------------------
-   Input Helpers
-   ------------------------------------------------------------------------- */
 function handleInputKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -788,90 +1007,181 @@ function handleInputKeydown(e) {
 }
 
 function autoResizeTextarea(el) {
+  if (!el) return;
   el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
 }
 
 function setExecuting(isExec) {
   APP_STATE.isExecuting = isExec;
   const sendBtn = document.getElementById('sendBtn');
-  if (isExec) {
-    sendBtn.disabled = true;
-    sendBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i>`;
-  } else {
-    sendBtn.disabled = false;
-    sendBtn.innerHTML = `<i data-lucide="arrow-up" class="w-4 h-4"></i>`;
+  const loading = document.getElementById('loadingIndicator');
+
+  if (sendBtn) {
+    sendBtn.disabled = isExec;
+    sendBtn.innerHTML = isExec
+      ? `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-white"></i>`
+      : `<i data-lucide="arrow-up" class="w-4 h-4"></i>`;
   }
-  lucide.createIcons();
+
+  if (loading) {
+    if (isExec) {
+      loading.classList.remove('hidden');
+      const scrollArea = document.getElementById('messagesContainer');
+      if (scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
+    } else {
+      loading.classList.add('hidden');
+    }
+  }
+
+  initIcons();
 }
 
-/* -------------------------------------------------------------------------
-   Mock Agent Engine (Demo / Offline Fallback)
-   ------------------------------------------------------------------------- */
-function generateMockAgentResponse(query) {
-  const q = query.toLowerCase();
+function updateClarificationNotice(show) {
+  const notice = document.getElementById('clarifyNotice');
+  const input = document.getElementById('queryInput');
 
-  if (q.includes('cardiology') || q.includes('unclear') || q.includes('clarif')) {
-    return {
-      requires_clarification: true,
-      clarification_question: "Do you want to count cardiology patients based on admission visit dates, or appointment consultation bookings?"
-    };
+  if (notice) {
+    if (show) notice.classList.remove('hidden');
+    else notice.classList.add('hidden');
   }
 
-  if (q.includes('patient') && (q.includes('2025') || q.includes('admit'))) {
-    return {
-      answer: "In **2025**, a total of **150 patients** were admitted to the hospital across all operational departments.",
-      sql: "SELECT COUNT(*) AS total_admissions, EXTRACT(YEAR FROM admission_date) AS admission_year\nFROM patients\nWHERE EXTRACT(YEAR FROM admission_date) = 2025\nGROUP BY admission_year;",
-      results: [
-        { admission_year: 2025, total_admissions: 150 }
-      ],
-      cache_hit: false,
-      latency_ms: 220
-    };
+  if (input) {
+    if (show) {
+      input.placeholder = 'Provide clarification to resume query...';
+      input.focus();
+    } else {
+      input.placeholder = 'Ask a question about your database in natural language...';
+    }
+  }
+}
+
+/* ==========================================================================
+   11. Sidebar, Navigation & Settings Modal
+   ========================================================================== */
+function toggleSidebar(forceState) {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (!sidebar) return;
+
+  const isMobile = window.innerWidth < 768;
+
+  if (isMobile) {
+    const isClosed = sidebar.classList.contains('-translate-x-full');
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : isClosed;
+
+    if (shouldOpen) {
+      sidebar.classList.remove('-translate-x-full');
+      if (backdrop) backdrop.classList.remove('hidden');
+    } else {
+      sidebar.classList.add('-translate-x-full');
+      if (backdrop) backdrop.classList.add('hidden');
+    }
+  } else {
+    // Desktop: toggle md:hidden or hidden
+    const isCollapsed = sidebar.classList.contains('md:hidden') || sidebar.classList.contains('hidden');
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : isCollapsed;
+
+    APP_STATE.sidebarCollapsed = !shouldOpen;
+    localStorage.setItem('qs_sidebar_collapsed', APP_STATE.sidebarCollapsed ? 'true' : 'false');
+
+    if (shouldOpen) {
+      sidebar.classList.remove('md:hidden', 'hidden', '-translate-x-full');
+    } else {
+      sidebar.classList.add('md:hidden');
+    }
   }
 
-  if (q.includes('doctor') || q.includes('top')) {
-    return {
-      answer: "Here are the **top 5 doctors** ranked by total completed patient consultations. **Dr. Marcus Vance** leads with 142 appointments.",
-      sql: "SELECT d.name AS doctor_name, d.specialization, COUNT(a.appointment_id) AS total_appointments\nFROM doctors d\nJOIN appointments a ON d.doctor_id = a.doctor_id\nGROUP BY d.doctor_id, d.name, d.specialization\nORDER BY total_appointments DESC\nLIMIT 5;",
-      results: [
-        { doctor_name: "Dr. Marcus Vance", specialization: "Cardiology", total_appointments: 142 },
-        { doctor_name: "Dr. Elena Rostova", specialization: "Neurology", total_appointments: 128 },
-        { doctor_name: "Dr. Tariq Mahmood", specialization: "Pediatrics", total_appointments: 115 },
-        { doctor_name: "Dr. Sarah Jenkins", specialization: "Orthopedics", total_appointments: 98 },
-        { doctor_name: "Dr. Claire Dubois", specialization: "General Medicine", total_appointments: 89 }
-      ],
-      cache_hit: true,
-      latency_ms: 45
-    };
+  initIcons();
+}
+
+function initSidebarState() {
+  const collapsed = localStorage.getItem('qs_sidebar_collapsed') === 'true';
+  APP_STATE.sidebarCollapsed = collapsed;
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar && collapsed && window.innerWidth >= 768) {
+    sidebar.classList.add('md:hidden');
+  }
+}
+
+function openSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  const input = document.getElementById('apiUrlInput');
+  const result = document.getElementById('modalConnResult');
+
+  if (input) input.value = APP_STATE.apiUrl;
+  if (result) result.classList.add('hidden');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function testEndpointFromModal() {
+  const input = document.getElementById('apiUrlInput');
+  const result = document.getElementById('modalConnResult');
+  const btn = document.getElementById('testConnBtn');
+  const testUrl = input ? input.value.trim() : '';
+
+  if (!testUrl || !result || !btn) return;
+
+  btn.disabled = true;
+  result.className = 'text-[11px] mt-2 text-slate-400 font-mono';
+  result.textContent = 'Testing connection...';
+  result.classList.remove('hidden');
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`${testUrl}/`, { method: 'GET', signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      result.className = 'text-[11px] mt-2 text-emerald-400 font-mono';
+      result.textContent = 'Connection verified! Health check responded (200 OK).';
+    } else {
+      result.className = 'text-[11px] mt-2 text-rose-400 font-mono';
+      result.textContent = `Server reachable, but returned HTTP ${res.status}.`;
+    }
+  } catch (err) {
+    result.className = 'text-[11px] mt-2 text-rose-400 font-mono';
+    result.textContent = `Failed to connect: ${err.message || 'Network error'}.`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function saveSettings() {
+  const input = document.getElementById('apiUrlInput');
+  const newUrl = input ? input.value.trim() : '';
+
+  if (newUrl) {
+    APP_STATE.apiUrl = newUrl;
+    localStorage.setItem('qs_api_url', newUrl);
   }
 
-  if (q.includes('wait') || q.includes('time') || q.includes('department')) {
-    return {
-      answer: "The average patient wait time is highest in **Emergency** (38.5 mins) and lowest in **Pediatrics** (14.1 mins).",
-      sql: "SELECT dep.name AS department, ROUND(AVG(a.wait_time_minutes), 1) AS avg_wait_mins\nFROM departments dep\nJOIN doctors doc ON dep.department_id = doc.department_id\nJOIN appointments a ON doc.doctor_id = a.doctor_id\nGROUP BY dep.department_id, dep.name\nORDER BY avg_wait_mins DESC;",
-      results: [
-        { department: "Emergency", avg_wait_mins: 38.5 },
-        { department: "Orthopedics", avg_wait_mins: 26.2 },
-        { department: "Cardiology", avg_wait_mins: 22.0 },
-        { department: "Neurology", avg_wait_mins: 18.4 },
-        { department: "Pediatrics", avg_wait_mins: 14.1 }
-      ],
-      cache_hit: false,
-      latency_ms: 310
-    };
+  closeSettingsModal();
+  checkBackendHealth();
+}
+
+function handleGlobalKeydown(e) {
+  // Ctrl+K -> New Query
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    startNewSession(true);
   }
 
-  return {
-    answer: `Executed query for: "${query}". Found 4 matching records meeting your criteria.`,
-    sql: `SELECT p.patient_id, p.full_name, p.status, d.name AS department\nFROM patients p\nLEFT JOIN departments d ON p.department_id = d.department_id\nLIMIT 4;`,
-    results: [
-      { patient_id: 1, full_name: "Alice Johnson", status: "Active", department: "Cardiology" },
-      { patient_id: 2, full_name: "Robert Smith", status: "Discharged", department: "Neurology" },
-      { patient_id: 3, full_name: "Emma Watson", status: "Active", department: "Pediatrics" },
-      { patient_id: 4, full_name: "Liam Davis", status: "Admitted", department: "Orthopedics" }
-    ],
-    cache_hit: false,
-    latency_ms: 280
-  };
+  // Ctrl+\ -> Toggle Sidebar
+  if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+    e.preventDefault();
+    toggleSidebarCollapse();
+  }
+
+  // Escape -> Close modal
+  if (e.key === 'Escape') {
+    closeSettingsModal();
+    toggleSidebar(false);
+  }
 }
