@@ -11,6 +11,6 @@ def sql_safety_node(s: state) -> dict:
     is_safe, reason = validate_sql_safety(s.sql)
 
     return {
-        "sql_valid": is_safe,
-        "sql_valid_error": None if is_safe else reason,
+        "ast_safe": is_safe,
+        "ast_error": None if is_safe else reason,
     }

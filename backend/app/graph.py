@@ -20,6 +20,10 @@ from app.nodes.check_cache_node import check_cache_node
 from app.nodes.input_guard_node import input_guard_node
 from app.nodes.meta_guard_node import meta_guard_node
 from app.nodes.combine_guards_node import combine_guards_node
+from app.nodes.combine_sql_validations_node import (
+    combine_sql_validations_node,
+    route_after_sql_validation,
+)
 from app.nodes.sql_safety_node import sql_safety_node
 from app.nodes.output_guard_node import output_guard_node
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -47,6 +51,7 @@ graph.add_node('validate_sql_syntax', validate_sql_syntax)
 graph.add_node('correct_sql_syntax', correct_sql_syntax)
 graph.add_node('correct_sql_semantic', correct_sql_semantic)
 graph.add_node('validate_sql_semantic', validate_sql_semantic)
+graph.add_node('combine_sql_validations', combine_sql_validations_node)
 graph.add_node('execute_sql', execute_sql)
 graph.add_node('input_guard', input_guard_node) 
 graph.add_node('meta_guard', meta_guard_node)
@@ -95,35 +100,37 @@ graph.add_conditional_edges(
     }
 )
 
+# Parallel SQL Validation: Fan-out from generate_sql to all 3 validators concurrently
 graph.add_edge('generate_sql', 'sql_safety')
+graph.add_edge('generate_sql', 'validate_sql_syntax')
+graph.add_edge('generate_sql', 'validate_sql_semantic')
+
+# Parallel Retry Fan-out from correct_sql_syntax
+graph.add_edge('correct_sql_syntax', 'sql_safety')
+graph.add_edge('correct_sql_syntax', 'validate_sql_syntax')
+graph.add_edge('correct_sql_syntax', 'validate_sql_semantic')
+
+# Parallel Retry Fan-out from correct_sql_semantic
+graph.add_edge('correct_sql_semantic', 'sql_safety')
+graph.add_edge('correct_sql_semantic', 'validate_sql_syntax')
+graph.add_edge('correct_sql_semantic', 'validate_sql_semantic')
+
+# Fan-in: all 3 validators join at combine_sql_validations
+graph.add_edge('sql_safety', 'combine_sql_validations')
+graph.add_edge('validate_sql_syntax', 'combine_sql_validations')
+graph.add_edge('validate_sql_semantic', 'combine_sql_validations')
+
+# Conditional routing from combined validations
 graph.add_conditional_edges(
-    'sql_safety',
-    lambda x: 'generate_answer' if not x.sql_valid else 'validate_sql_syntax',
-    {
-        'generate_answer': 'generate_answer',
-        'validate_sql_syntax': 'validate_sql_syntax',
-    }
-)
-graph.add_conditional_edges(
-    "validate_sql_syntax",
-    lambda x: "generate_answer" if x.permission_denied == True else "correct_sql_syntax" if x.sql_valid == False and x.correct_sql_count < 3 else "validate_sql_semantic",
+    "combine_sql_validations",
+    route_after_sql_validation,
     {
         "generate_answer": "generate_answer",
         "correct_sql_syntax": "correct_sql_syntax",
-        "validate_sql_semantic": "validate_sql_semantic"
-    }
-)
-graph.add_edge('correct_sql_syntax', 'validate_sql_syntax')
-
-graph.add_conditional_edges(
-    "validate_sql_semantic",
-    lambda x: "correct_sql_semantic" if (x.semantic_error and x.correct_semantic_count < 2) else "execute_sql",
-    {
         "correct_sql_semantic": "correct_sql_semantic",
         "execute_sql": "execute_sql",
     }
 )
-graph.add_edge('correct_sql_semantic', 'sql_safety')
 graph.add_edge('execute_sql', 'generate_answer')
 graph.add_edge('generate_answer', 'output_guard')
 graph.add_edge('output_guard', END)

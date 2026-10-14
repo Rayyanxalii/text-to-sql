@@ -21,6 +21,14 @@ class state(BaseModel):
     db_schema: str = metadata
     sql: str = ""
 
+    # Distinct fields for parallel SQL validations
+    ast_safe: bool = True
+    ast_error: str | None = None
+
+    syntax_valid: bool = True
+    syntax_error: str | None = None
+
+    # Combined SQL validation state
     sql_valid: bool = False
     sql_valid_error: str | None = None
 

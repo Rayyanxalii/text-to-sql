@@ -28,8 +28,8 @@ def validate_sql_syntax(graph_state : state):
             conn.execute(text(f"EXPLAIN {sql}"))
             
         return {
-            "sql_valid": True,
-            "sql_valid_error": "",
+            "syntax_valid": True,
+            "syntax_error": "",
             'permission_denied': False
         }
         
@@ -40,8 +40,8 @@ def validate_sql_syntax(graph_state : state):
         print(f"[validate_sql_syntax] SQL validation failed. Error: {e}. \n Permission denied: {permission_denied}")
         
         return {
-            'sql_valid': False,
-            'sql_valid_error': str(e),
+            'syntax_valid': False,
+            'syntax_error': str(e),
             'permission_denied': permission_denied
         }
         
