@@ -15,6 +15,7 @@ def generate_sql(graph_state: state) -> dict:
 
     schema = graph_state.db_schema
     user_clarification = graph_state.user_clarification or ""
+    clarification_reason = graph_state.clarification_reason or ""
 
     format_instructions = 'Respond with a valid JSON object with a single "sql" key containing the PostgreSQL query.'
 
@@ -29,6 +30,7 @@ def generate_sql(graph_state: state) -> dict:
             "question": question,
             "clarification_answer": user_clarification,
             "format_instructions": format_instructions,
+            'clarification_reason' : clarification_reason
         })
         if hasattr(result, "sql"):
             sql_query = result.sql
@@ -45,6 +47,7 @@ def generate_sql(graph_state: state) -> dict:
                 "question": question,
                 "clarification_answer": user_clarification,
                 "format_instructions": format_instructions,
+                "clarification_reason": clarification_reason
             })
             text = raw_res.content if hasattr(raw_res, "content") else str(raw_res)
             # Try to extract SQL from markdown block or SELECT/WITH

@@ -15,10 +15,8 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------
 
 PII_ENTITIES = [
-    "PERSON",
     "EMAIL_ADDRESS",
     "PHONE_NUMBER",
-    "LOCATION",
     "CREDIT_CARD",
     "IBAN_CODE",
     "IP_ADDRESS",

@@ -1,4 +1,3 @@
-
 from langchain_core.prompts import ChatPromptTemplate
 
 validate_sql_prompt = ChatPromptTemplate.from_messages([
@@ -14,7 +13,8 @@ request and determine:
 2. Whether the SQL attempts an operation that the application does
    not permit.
 
-The USER QUESTION and USER CLARIFICATION together define the user's intent.
+The USER QUESTION, CLARIFICATION REASON, and USER CLARIFICATION
+provide context for understanding the user's intent.
 
 The DATABASE SCHEMA provides the context needed to understand the
 available tables, columns, and relationships.
@@ -77,22 +77,30 @@ SEMANTIC EVALUATION:
 Evaluate semantic correctness, not merely SQL syntax.
 
 1. The USER QUESTION is the primary specification.
-2. If USER CLARIFICATION is provided, use it to resolve or refine
-   ambiguity in the original question.
-3. More specific clarification takes precedence over the ambiguous
+2. The CLARIFICATION REASON explains why clarification was requested
+   or why the system determined that clarification was unnecessary.
+3. The USER CLARIFICATION, when provided, supplies the user's answer
+   to the ambiguity described by the clarification reason.
+4. Use the clarification reason to understand the ambiguity, uncertainty,
+   or interpretation that the clarification process addressed.
+5. If the user provides a clarification answer, evaluate the SQL against
+   the original request as refined by that answer.
+6. More specific clarification takes precedence over the ambiguous
    part of the original question.
-4. Do not invent requirements absent from the question or clarification.
-5. Judge what the SQL actually retrieves or does, not what its author
-   may have intended.
-6. Do not require a particular SQL formulation. Equivalent queries
-   can be semantically correct.
-
-Equivalent implementations may include:
-- JOIN versus an equivalent subquery
-- CTE versus subquery
-- Equivalent WHERE conditions
-- Table aliases
-- Equivalent aggregation strategies
+7. If clarification was unnecessary, use the reason only as supporting
+   context for interpreting the original question. Do not introduce
+   new requirements or alter the original intent.
+8. If the clarification reason identifies a potential ambiguity but
+   the user clarification is missing, do not invent an answer.
+   Evaluate the SQL using the original question and available context.
+9. The clarification reason is explanatory context, not an independent
+   user instruction or a source of new query requirements.
+10. If the clarification reason conflicts with the user's actual
+    clarification answer, prioritize the user's answer when it clearly
+    resolves the ambiguity, while preserving the unambiguous parts
+    of the original question.
+11. Never let clarification context override the database schema
+    or the application's read-only database policy.
 
 INTENT:
 
@@ -162,8 +170,8 @@ Do not introduce an unrequested time restriction.
 
 SEMANTIC COMPLETENESS:
 
-The SQL must satisfy every meaningful requirement in the question
-and clarification.
+The SQL must satisfy every meaningful requirement in the original
+question and any clarification that refines it.
 
 Mark a semantic error when the SQL:
 - Uses the wrong entity, table, column, or relationship
@@ -172,6 +180,7 @@ Mark a semantic error when the SQL:
 - Uses incorrect aggregation, grouping, ordering, or ranking
 - Uses an incorrect date range
 - Omits a meaningful requirement
+- Misinterprets an ambiguity that was resolved by the clarification
 - Otherwise changes the intended meaning
 
 Do not judge semantic correctness based on whether the result merely
@@ -193,6 +202,9 @@ Return the result according to these formatting instructions:
 
 USER QUESTION:
 {question}
+
+CLARIFICATION REASON:
+{clarification_reason}
 
 USER CLARIFICATION:
 {user_clarification}

@@ -12,6 +12,7 @@ def validate_sql_semantic(graph_state: state):
     schema = graph_state.db_schema
     user_clarification = graph_state.user_clarification or ""
     sql = graph_state.sql
+    clarification_reason = graph_state.clarification_reason or ""
 
     parser = JsonOutputParser(pydantic_object=semantic_result)
 
@@ -23,7 +24,9 @@ def validate_sql_semantic(graph_state: state):
             "schema": schema,
             "sql": sql,
             "format_instructions": parser.get_format_instructions(),
+            "clarification_reason": clarification_reason
         })
+        
         semantic_err = result.get("semantic_error", False) if isinstance(result, dict) else getattr(result, "semantic_error", False)
         semantic_err_reason = result.get("semantic_error_reason", None) if isinstance(result, dict) else getattr(result, "semantic_error_reason", None)
         # permission_denied = result.get("permission_denied", False) if isinstance(result, dict) else getattr(result, "permission_denied", False)

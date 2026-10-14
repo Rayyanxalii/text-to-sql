@@ -23,22 +23,49 @@ Rules:
 11. Use SELECT * when the user explicitly asks for all details or when it is clearly appropriate.
 12. Generate one SQL query that directly answers the user's question.
 13. Match attribute and table names strictly to the database schema.
+
 14. CASE-INSENSITIVE TEXT MATCHING (CRITICAL):
-    - PostgreSQL string comparisons using '=' are strictly case-sensitive and will return 0 rows if casing differs (e.g. 'Pharmacist' vs 'pharmacist').
-    - NEVER use strict equality '=' on text/varchar columns (roles, specializations, statuses, titles, names, departments).
-    - ALWAYS use case-insensitive pattern matching: use ILIKE (e.g. column ILIKE '%value%') or LOWER(column) LIKE LOWER('%value%').
-15. PLURAL/SINGULAR & ROOT-STEM MATCHING (CRITICAL):
-    - Users often ask questions using plurals or variations (e.g. "pharmacists", "pediatricians", "doctors", "active patients").
-    - Database records usually store singular root forms (e.g. 'pharmacist', 'Pediatrician') or mixed casing.
-    - Match using the root stem with ILIKE: e.g., for "pharmacists", generate `specialization ILIKE '%pharmacist%'`.
-    - This reliably matches 'pharmacist', 'Pharmacist', 'pharmacists', and compound titles like 'Chief Pharmacist'.
+    - Do not use strict equality '=' for case-insensitive matching of text/varchar values such as roles, specializations, statuses, titles, names, and departments.
+    - Use ILIKE when matching text without regard to case.
+    - Use exact ILIKE patterns when the user requests an exact category match, such as:
+      `status ILIKE 'completed'`
+    - Use wildcard patterns when partial matching is appropriate, such as:
+      `specialization ILIKE '%pharmacist%'`
+    - Do not use partial matching when it could unintentionally match unrelated categories.
+
+15. PLURAL/SINGULAR & ROOT-STEM MATCHING:
+    - Users may use plurals or variations of stored values, such as 'pharmacists', 'pediatricians', or 'doctors'.
+    - Use the schema's sample values and comments to identify appropriate matching patterns.
+    - When appropriate, normalize plural or word variations using a suitable root stem with ILIKE.
+    - For example, `specialization ILIKE '%pharmacist%'` can match 'Pharmacist' and 'Chief Pharmacist'.
+    - Do not assume every plural or similar word has the same meaning. Choose patterns that preserve the user's intended meaning.
+
 16. SCHEMA LINKING & SAMPLE VALUES:
-    - Refer to the sample values provided in the schema comments to identify the right column and data patterns, but always use ILIKE '%stem%' for robustness.
+    - Refer to schema comments and sample values to identify the correct tables, columns, and stored value patterns.
+    - Use these values to guide column selection, JOINs, and filtering.
+    - Sample values are evidence of possible data formats, not proof that other values cannot exist.
+    - Never use a column or relationship that is absent from the provided schema.
+
+17. CLARIFICATION CONTEXT (CRITICAL):
+    - You will receive a clarification reason explaining why the clarification process was triggered or why clarification was considered unnecessary.
+    - Treat the clarification reason as contextual information that helps you interpret the user's original request.
+    - If clarification was requested because the question was ambiguous, use the reason to understand what information was missing or uncertain.
+    - If the user provided a clarification answer, use it to resolve the specific ambiguity described in the clarification reason.
+    - If clarification was not needed, use the reason to understand why the original question was considered sufficiently clear. Do not introduce ambiguity that was not present in the original request.
+    - If the clarification answer refines the user's intent, incorporate it while preserving the original request's intent.
+    - Do not interpret the clarification reason itself as a new database query or as an instruction to add extra filters, JOINs, columns, or conditions.
+    - If the clarification answer is missing, empty, or unavailable, do not invent an answer. Generate SQL only when the original request and available context provide enough information.
+    - The original user question, clarification answer, and clarification reason must be interpreted together.
+    - The database schema is the authoritative source for valid tables, columns, and relationships.
+    - Never let clarification context override schema constraints or SQL safety requirements.
 
 Database Schema:
 {schema}
 
-User Clarification (if any):
+Clarification Reason:
+{clarification_reason}
+
+User Clarification Answer (if any):
 {clarification_answer}
 
 Format Instructions:
