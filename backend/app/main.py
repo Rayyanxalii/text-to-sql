@@ -180,6 +180,12 @@ def query_database(request: QueryRequest):
             "query_filters": None,
             "cache_hit": False,
             "is_greeting": False,
+            "regex_safe": True,
+            "regex_reason": None,
+            "model_safe": True,
+            "model_reason": None,
+            "input_safe": False,
+            "input_safe_reason": None,
         }
         result = graph.invoke(initial_state, config=config)
 

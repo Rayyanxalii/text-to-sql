@@ -17,7 +17,7 @@ def input_guard_node(graph_state: state) -> dict:
     print(f"[InputGuard] is_safe={result['is_safe']}, is_greeting={result['is_greeting']}, reason={result['is_safe_reason']}")
 
     return {
-        "input_safe": result["is_safe"],
-        "input_safe_reason": result["is_safe_reason"],
+        "regex_safe": result["is_safe"],
+        "regex_reason": result["is_safe_reason"],
         "is_greeting": result["is_greeting"],
     }

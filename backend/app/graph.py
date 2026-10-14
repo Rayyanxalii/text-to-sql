@@ -18,6 +18,7 @@ from app.nodes.extract_filters_node import extract_query_filters
 from app.nodes.check_cache_node import check_cache_node
 from app.nodes.input_guard_node import input_guard_node
 from app.nodes.meta_guard_node import meta_guard_node
+from app.nodes.combine_guards_node import combine_guards_node
 from app.nodes.sql_safety_node import sql_safety_node
 from app.nodes.output_guard_node import output_guard_node
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -47,22 +48,21 @@ graph.add_node('validate_sql_semantic', validate_sql_semantic)
 graph.add_node('execute_sql', execute_sql)
 graph.add_node('input_guard', input_guard_node) 
 graph.add_node('meta_guard', meta_guard_node)
+graph.add_node('combine_guards', combine_guards_node)
 graph.add_node('output_guard', output_guard_node)
 
 
+# Parallel Input Guardrails: Fan-out from START to both guards concurrently
 graph.add_edge(START, 'input_guard')
-graph.add_conditional_edges(
-    "input_guard",
-    lambda x: "generate_answer" if (not x.input_safe or x.is_greeting) else "meta_guard",
-    {
-        "meta_guard": "meta_guard",
-        "generate_answer": "generate_answer",
-    }
-)
+graph.add_edge(START, 'meta_guard')
+
+# Fan-in: both report to combine_guards
+graph.add_edge('input_guard', 'combine_guards')
+graph.add_edge('meta_guard', 'combine_guards')
 
 graph.add_conditional_edges(
-    "meta_guard",
-    lambda x: "clarification" if x.input_safe else "generate_answer",
+    "combine_guards",
+    lambda x: "generate_answer" if (not x.input_safe or x.is_greeting) else "clarification",
     {
         "clarification": "clarification",
         "generate_answer": "generate_answer",
@@ -78,6 +78,7 @@ graph.add_conditional_edges(
     }
 )
 graph.add_edge("ask_user", "input_guard")
+graph.add_edge("ask_user", "meta_guard")
 
 # extract_filters → check_cache
 graph.add_edge("extract_filters", "check_cache")

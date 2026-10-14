@@ -44,9 +44,17 @@ class state(BaseModel):
     cache_hit: bool = False
     
     
+    # Individual guardrail outputs for parallel execution
+    regex_safe: bool = True
+    regex_reason: str | None = None
+    is_greeting: bool = False
+
+    model_safe: bool = True
+    model_reason: str | None = None
+
+    # Combined input safety state
     input_safe : bool = False
     input_safe_reason : str | None = None
-    is_greeting: bool = False
     
     permission_denied : bool = False
     

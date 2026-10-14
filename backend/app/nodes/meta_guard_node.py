@@ -22,6 +22,6 @@ def meta_guard_node(graph_state: state) -> dict:
     print(f"[MetaGuard] is_safe={result['is_safe']}, label={result['label']}, score={result['score']:.4f}")
 
     return {
-        "input_safe": result["is_safe"],
-        "input_safe_reason": result["reason"],
+        "model_safe": result["is_safe"],
+        "model_reason": result["reason"],
     }
