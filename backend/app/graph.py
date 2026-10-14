@@ -13,6 +13,7 @@ from app.nodes.clarification_node  import clarification_node
 from app.nodes.generate_sql_node import generate_sql
 from app.nodes.ask_user_node import ask_user
 from app.nodes.correct_sql_syntax_node import correct_sql_syntax
+from app.nodes.correct_sql_semantic_node import correct_sql_semantic
 from app.nodes.validate_sql_semantic_node import validate_sql_semantic
 from app.nodes.extract_filters_node import extract_query_filters
 from app.nodes.check_cache_node import check_cache_node
@@ -44,6 +45,7 @@ graph.add_node('generate_sql', generate_sql)
 graph.add_node('sql_safety', sql_safety_node)
 graph.add_node('validate_sql_syntax', validate_sql_syntax)
 graph.add_node('correct_sql_syntax', correct_sql_syntax)
+graph.add_node('correct_sql_semantic', correct_sql_semantic)
 graph.add_node('validate_sql_semantic', validate_sql_semantic)
 graph.add_node('execute_sql', execute_sql)
 graph.add_node('input_guard', input_guard_node) 
@@ -113,7 +115,15 @@ graph.add_conditional_edges(
 )
 graph.add_edge('correct_sql_syntax', 'validate_sql_syntax')
 
-graph.add_edge('validate_sql_semantic', 'execute_sql')
+graph.add_conditional_edges(
+    "validate_sql_semantic",
+    lambda x: "correct_sql_semantic" if (x.semantic_error and x.correct_semantic_count < 2) else "execute_sql",
+    {
+        "correct_sql_semantic": "correct_sql_semantic",
+        "execute_sql": "execute_sql",
+    }
+)
+graph.add_edge('correct_sql_semantic', 'sql_safety')
 graph.add_edge('execute_sql', 'generate_answer')
 graph.add_edge('generate_answer', 'output_guard')
 graph.add_edge('output_guard', END)

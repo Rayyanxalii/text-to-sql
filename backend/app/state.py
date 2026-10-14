@@ -26,6 +26,7 @@ class state(BaseModel):
 
     ask_user_count: int = 0
     correct_sql_count: int = 0
+    correct_semantic_count: int = 0
 
     semantic_error: bool | None = None
     semantic_error_reason: str | None = None

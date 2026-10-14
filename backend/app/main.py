@@ -172,6 +172,7 @@ def query_database(request: QueryRequest):
             "sql_valid_error": None,
             "ask_user_count": 0,
             "correct_sql_count": 0,
+            "correct_semantic_count": 0,
             "semantic_error": None,
             "semantic_error_reason": None,
             "db_result": None,
