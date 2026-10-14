@@ -15,10 +15,10 @@ PII_PATTERNS = {
         re.IGNORECASE,
     ),
     "CNIC": re.compile(
-        r"(?<!\d)\d{5}-?\d{7}-?\d(?!\d)"
+        r"(?<!\d)\d{5}[\s\-\u2010-\u2015\u2212]*\d{7}[\s\-\u2010-\u2015\u2212]*\d(?!\d)"
     ),
     "PHONE": re.compile(
-        r"(?<!\d)(?:\+?92[\s-]?|0)?3\d{2}[\s-]?\d{7}(?!\d)"
+        r"(?<!\d)(?:\+?92[\s\-\u2010-\u2015\u2212]?|0)?3\d{2}[\s\-\u2010-\u2015\u2212]?\d{7}(?!\d)"
     ),
     "ADDRESS": re.compile(
         r"\bDemo Street\s+\d+,\s*Test Town\b",

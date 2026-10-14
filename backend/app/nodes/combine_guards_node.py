@@ -12,12 +12,13 @@ def combine_guards_node(graph_state: state) -> dict:
     model_safe = graph_state.model_safe
 
     is_safe = regex_safe and model_safe
-    reason = None
-
+    reasons = []
     if not regex_safe:
-        reason = graph_state.regex_reason
-    elif not model_safe:
-        reason = reason + graph_state.model_reason
+        reasons.append(graph_state.regex_reason or "Regex guardrail flagged unsafe input.")
+    if not model_safe:
+        reasons.append(graph_state.model_reason or "Model guardrail flagged prompt injection.")
+
+    reason = " | ".join(reasons) if reasons else None
 
     print(
         f"[CombineGuards] regex_safe={regex_safe}, "
